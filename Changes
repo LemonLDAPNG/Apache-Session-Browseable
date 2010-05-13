@@ -1,0 +1,10 @@
+Revision history for Perl extension Apache::Session::Browseable.
+
+0.1  Sat Oct 31 08:10:54 2009
+	- Initial release
+
+0.2  Sun Nov 1 10:06:51 2009
+	- Remove 5.10 dependency
+
+0.3  Sun Nov 1 17:12:34 2009
+    - Add Sybase, Oracle, Informix, File and Postgres
