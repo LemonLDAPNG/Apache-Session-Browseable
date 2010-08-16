@@ -7,8 +7,9 @@ use Apache::Session::Lock::MySQL;
 use Apache::Session::Browseable::Store::MySQL;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Storable;
+use Apache::Session::Browseable::DBI;
 
-our $VERSION = '0.2';
+our $VERSION = '0.3';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
 sub populate {

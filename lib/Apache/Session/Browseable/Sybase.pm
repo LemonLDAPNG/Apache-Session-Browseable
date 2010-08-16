@@ -7,8 +7,9 @@ use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::Sybase;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Sybase;
+use Apache::Session::Browseable::DBI;
 
-our $VERSION = '0.1';
+our $VERSION = '0.2';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
 sub populate {
