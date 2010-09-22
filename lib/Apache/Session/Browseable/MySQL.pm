@@ -4,6 +4,7 @@ use strict;
 
 use Apache::Session::Browseable::DBI;
 use Apache::Session::Browseable::Store::MySQL;
+use Apache::Session::Lock::Null;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Storable;
 
