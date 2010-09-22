@@ -1,9 +1,12 @@
 package Apache::Session::Browseable::DBI;
 
 use strict;
+
 use DBI;
+use Apache::Session;
 
 our $VERSION = '0.1';
+our @ISA     = qw(Apache::Session);
 
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
