@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Apache-Session-Browseable
-version:            0.3
+version:            0.5
 abstract:           Add index and search methods to Apache::Session
 author:
     - Xavier Guimard <x.guimard@free.fr>
