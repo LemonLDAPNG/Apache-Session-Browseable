@@ -9,7 +9,7 @@ use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Storable;
 use Apache::Session::Browseable::DBI;
 
-our $VERSION = '0.2';
+our $VERSION = '0.3';
 our @ISA     = qw(Apache::Session);
 
 sub populate {
@@ -42,7 +42,7 @@ sub searchOn {
         sub {
             my $entry = shift;
             my $id    = shift;
-            return undef unless ( $entry->{selectField} eq $value );
+            return undef unless ( $entry->{$selectField} eq $value );
             if (@fields) {
                 $res{$id}->{$_} = $entry->{$_} foreach (@fields);
             }

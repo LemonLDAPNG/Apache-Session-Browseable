@@ -5,7 +5,7 @@ use strict;
 use DBI;
 use Apache::Session;
 
-our $VERSION = '0.1';
+our $VERSION = '0.2';
 our @ISA     = qw(Apache::Session);
 
 sub searchOn {
@@ -38,7 +38,7 @@ sub searchOn {
             sub {
                 my $entry = shift;
                 my $id    = shift;
-                return undef unless ( $entry->{selectField} eq $value );
+                return undef unless ( $entry->{$selectField} eq $value );
                 if (@fields) {
                     $res{$id}->{$_} = $entry->{$_} foreach (@fields);
                 }
