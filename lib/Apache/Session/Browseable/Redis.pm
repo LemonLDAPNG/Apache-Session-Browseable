@@ -24,6 +24,13 @@ sub populate {
     return $self;
 }
 
+sub unserialize {
+    my $session = shift;
+    my $tmp = { serialized => $session };
+    Apache::Session::Serialize::Base64::unserialize($tmp);
+    return $tmp->{data};
+}
+
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
 
@@ -37,8 +44,7 @@ sub searchOn {
             next unless ($k);
             my $tmp = $redisObj->get($k);
             next unless ($tmp);
-            $tmp = &Apache::Session::Serialize::Base64::unserialize(
-                { serialized => $tmp } );
+            $tmp = unserialize($tmp);
             if (@fields) {
                 $res{$k}->{$_} = $tmp->{$_} foreach (@fields);
             }
@@ -79,8 +85,7 @@ sub get_key_from_all_sessions {
     foreach my $k (@keys) {
         next if ( !$k or $k =~ /_/ );
         my $v   = $redisObj->get($k);
-        my $tmp = &Apache::Session::Serialize::Base64::unserialize(
-            { serialized => $v } );
+        my $tmp = unserialize($v);
         if ( ref($data) eq 'CODE' ) {
             $tmp = &$data( $tmp, $k );
             $res{$k} = $tmp if ( defined($tmp) );
@@ -98,6 +103,7 @@ sub get_key_from_all_sessions {
 
 1;
 __END__
+
 =head1 NAME
 
 Apache::Session::Browseable::Redis - Add index and search methods to
