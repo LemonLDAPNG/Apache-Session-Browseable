@@ -15,3 +15,6 @@ Revision history for Perl extension Apache::Session::Browseable.
 0.5  Mon Dec 6 21:54:23 2010
     - Add Redis (Closes LEMONLDAP-244)
 
+0.6  Mon Dec 8 16:43:23 2010
+    - Add LDAP (Closes LEMONLDAP-243)
+    - Redis parsing returned nothing
