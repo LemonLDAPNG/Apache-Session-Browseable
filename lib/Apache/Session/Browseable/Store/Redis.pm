@@ -63,7 +63,7 @@ __END__
 =head1 NAME
 
 Apache::Session::Browseable::Store::Redis - An implementation of
-Apache::Session::Browseable::Store
+Apache::Session::Store
 
 =head1 SYNOPSIS
 

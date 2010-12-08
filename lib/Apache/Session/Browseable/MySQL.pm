@@ -30,7 +30,8 @@ sub populate {
 __END__
 =head1 NAME
 
-Apache::Session::Browseable - Add index and search methods to Apache::Session
+Apache::Session::Browseable::MySQL - Add index and search methods to
+Apache::Session::MySQL
 
 =head1 SYNOPSIS
 

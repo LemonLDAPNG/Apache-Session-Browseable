@@ -36,6 +36,7 @@ sub DESTROY {
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
 
+    # TODO: create an index system
     my %res = ();
     $class->get_key_from_all_sessions(
         $args,
@@ -87,35 +88,5 @@ sub get_key_from_all_sessions {
 }
 
 1;
+__END__
 
-=pod
-
-=head1 NAME
-
-Apache::Session::File - An implementation of Apache::Session
-
-=head1 SYNOPSIS
-
- use Apache::Session::File;
-
- tie %hash, 'Apache::Session::File', $id, {
-    Directory => '/tmp/sessions',
-    LockDirectory   => '/var/lock/sessions',
- };
-
-=head1 DESCRIPTION
-
-This module is an implementation of Apache::Session.  It uses the File backing
-store and the File locking scheme.  You must specify the directory for the
-object store and the directory for locking in arguments to the constructor. See
-the example, and the documentation for Apache::Session::Store::File and
-Apache::Session::Lock::File.
-
-=head1 AUTHOR
-
-This module was written by Jeffrey William Baker <jwbaker@acm.org>.
-
-=head1 SEE ALSO
-
-L<Apache::Session::DB_File>, L<Apache::Session::Flex>,
-L<Apache::Session::MySQL>, L<Apache::Session::Postgres>, L<Apache::Session>

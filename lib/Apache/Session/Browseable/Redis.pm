@@ -100,7 +100,8 @@ sub get_key_from_all_sessions {
 __END__
 =head1 NAME
 
-Apache::Session::Browseable - Add index and search methods to Apache::Session
+Apache::Session::Browseable::Redis - Add index and search methods to
+Apache::Session::Redis
 
 =head1 SYNOPSIS
 

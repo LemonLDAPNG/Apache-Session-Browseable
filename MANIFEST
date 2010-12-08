@@ -3,6 +3,7 @@ lib/Apache/Session/Browseable.pod
 lib/Apache/Session/Browseable/DBI.pm
 lib/Apache/Session/Browseable/File.pm
 lib/Apache/Session/Browseable/Informix.pm
+lib/Apache/Session/Browseable/LDAP.pm
 lib/Apache/Session/Browseable/MySQL.pm
 lib/Apache/Session/Browseable/Oracle.pm
 lib/Apache/Session/Browseable/Postgres.pm
@@ -10,6 +11,7 @@ lib/Apache/Session/Browseable/Redis.pm
 lib/Apache/Session/Browseable/Store/DBI.pm
 lib/Apache/Session/Browseable/Store/File.pm
 lib/Apache/Session/Browseable/Store/Informix.pm
+lib/Apache/Session/Browseable/Store/LDAP.pm
 lib/Apache/Session/Browseable/Store/MySQL.pm
 lib/Apache/Session/Browseable/Store/Oracle.pm
 lib/Apache/Session/Browseable/Store/Postgres.pm
