@@ -3,7 +3,7 @@ package Apache::Session::Browseable::LDAP;
 use strict;
 use vars qw(@ISA $VERSION);
 
-$VERSION = '0.1';
+$VERSION = '0.2';
 @ISA     = qw(Apache::Session);
 
 use Apache::Session;
@@ -56,17 +56,18 @@ sub searchOn {
             foreach my $entry ( $msg->entries ) {
                 my $id = $entry->get_value('cn') or die;
                 my $tmp = $entry->get_value('description');
-                    next unless ($tmp);
-                $tmp = unserialize($tmp);
-                    if (@fields) {
-                        $res{$id}->{$_} = $tmp->{$_} foreach (@fields);
-                    }
-                    else {
-                        $res{$id} = $tmp;
-                    }
+                next unless ($tmp);
+                eval { $tmp = unserialize($tmp); };
+                next if ($@);
+                if (@fields) {
+                    $res{$id}->{$_} = $tmp->{$_} foreach (@fields);
+                }
+                else {
+                    $res{$id} = $tmp;
                 }
             }
         }
+    }
     else {
         $class->get_key_from_all_sessions(
             $args,
@@ -96,7 +97,7 @@ sub get_key_from_all_sessions {
     my $ldap =
       Apache::Session::Browseable::Store::LDAP::ldap( { args => $args } );
     my $msg = $ldap->search(
-        base   => $args->{ldapConfBase},
+        base => $args->{ldapConfBase},
 
      # VERY STRANGE BUG ! With this filter, description isn't base64 encoded !!!
      #filter => '(objectClass=applicationProcess)',
@@ -107,19 +108,20 @@ sub get_key_from_all_sessions {
         Apache::Session::Browseable::Store::LDAP->logError($msg);
     }
     else {
-    foreach my $entry ( $msg->entries ) {
+        foreach my $entry ( $msg->entries ) {
             my $id = $entry->get_value('cn') or die;
             my $tmp = $entry->get_value('description');
             next unless ($tmp);
-            $tmp = unserialize($tmp);
-        if ( ref($data) eq 'CODE' ) {
+            eval { $tmp = unserialize($tmp); };
+            netx if ($@);
+            if ( ref($data) eq 'CODE' ) {
                 $res{$id} = &$data( $tmp, $id );
-        }
-        elsif ($data) {
-            $data = [$data] unless ( ref($data) );
+            }
+            elsif ($data) {
+                $data = [$data] unless ( ref($data) );
                 $res{$id}->{$_} = $tmp->{$_} foreach (@$data);
-        }
-        else {
+            }
+            else {
                 $res{$id} = $tmp;
             }
         }
