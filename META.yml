@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Apache-Session-Browseable
-version:            0.5
+version:            0.7
 abstract:           Add index and search methods to Apache::Session
 author:
     - Xavier Guimard <x.guimard@free.fr>
@@ -16,7 +16,7 @@ no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.55_02
+generated_by:       ExtUtils::MakeMaker version 6.57_05
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4
