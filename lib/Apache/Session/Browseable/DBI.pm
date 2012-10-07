@@ -22,8 +22,8 @@ sub searchOn {
             "SELECT id,a_session from $table_name where $selectField='$value'");
         $sth->execute;
         while ( my @row = $sth->fetchrow_array ) {
-            my $tmp = &Apache::Session::Serialize::Storable::unserialize(
-                { serialized => $row[1] } );
+            my $sub = "$class::unserialize";
+            my $tmp = &$sub ( { serialized => $row[1] } );
             if (@fields) {
                 $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@fields);
             }
@@ -64,8 +64,8 @@ sub get_key_from_all_sessions {
     $sth->execute;
     my %res;
     while ( my @row = $sth->fetchrow_array ) {
-        my $tmp = &Apache::Session::Serialize::Storable::unserialize(
-            { serialized => $row[1] } );
+        my $sub = "$class::unserialize";
+        my $tmp = &$sub ( { serialized => $row[1] } );
         if ( ref($data) eq 'CODE' ) {
             $tmp = &$data( $tmp, $row[0] );
             $res{ $row[0] } = $tmp if ( defined($tmp) );
