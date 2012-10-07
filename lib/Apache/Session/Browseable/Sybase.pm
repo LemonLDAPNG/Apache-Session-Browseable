@@ -12,7 +12,7 @@ use Apache::Session::Browseable::DBI;
 our $VERSION = '0.2';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
-*serialize = \&Apache::Session::Serialize::Sybase::serialize;
+*serialize   = \&Apache::Session::Serialize::Sybase::serialize;
 *unserialize = \&Apache::Session::Serialize::Sybase::unserialize;
 
 sub populate {

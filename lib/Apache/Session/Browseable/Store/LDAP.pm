@@ -27,16 +27,14 @@ sub insert {
         push @$ou, "${i}_$t";
     }
     my $attrs = [
-            objectClass => [ 'top', 'applicationProcess' ],
-            cn          => $session->{data}->{_session_id},
-            description => $session->{serialized},
-        ];
-    push @$attrs, (ou=>$ou) if($ou);
+        objectClass => [ 'top', 'applicationProcess' ],
+        cn          => $session->{data}->{_session_id},
+        description => $session->{serialized},
+    ];
+    push @$attrs, ( ou => $ou ) if ($ou);
 
-    my $msg = $self->ldap->add(
-        "cn=$id," . $self->{args}->{ldapConfBase},
-        attrs => $attrs,
-    );
+    my $msg = $self->ldap->add( "cn=$id," . $self->{args}->{ldapConfBase},
+        attrs => $attrs, );
     $self->logError($msg) if ( $msg->code );
 }
 
@@ -57,12 +55,11 @@ sub update {
         push @$ou, "${i}_$t";
     }
     my $attrs = { description => $session->{serialized} };
-    $attrs->{ou}=$ou if($ou);
+    $attrs->{ou} = $ou if ($ou);
 
     my $msg = $self->ldap->modify(
         "cn=$session->{data}->{_session_id}," . $self->{args}->{ldapConfBase},
-        replace => $attrs,
-    );
+        replace => $attrs, );
 
     $self->logError($msg) if ( $msg->code );
 }

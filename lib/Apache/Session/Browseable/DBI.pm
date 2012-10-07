@@ -23,7 +23,7 @@ sub searchOn {
         $sth->execute;
         while ( my @row = $sth->fetchrow_array ) {
             my $sub = "$class::unserialize";
-            my $tmp = &$sub ( { serialized => $row[1] } );
+            my $tmp = &$sub( { serialized => $row[1] } );
             if (@fields) {
                 $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@fields);
             }
@@ -65,7 +65,7 @@ sub get_key_from_all_sessions {
     my %res;
     while ( my @row = $sth->fetchrow_array ) {
         my $sub = "$class::unserialize";
-        my $tmp = &$sub ( { serialized => $row[1] } );
+        my $tmp = &$sub( { serialized => $row[1] } );
         if ( ref($data) eq 'CODE' ) {
             $tmp = &$data( $tmp, $row[0] );
             $res{ $row[0] } = $tmp if ( defined($tmp) );
@@ -86,8 +86,8 @@ sub _classDbh {
     my $args  = shift;
 
     my $datasource = $args->{DataSource} or die "No datasource given !";
-    my $username = $args->{UserName};
-    my $password = $args->{Password};
+    my $username   = $args->{UserName};
+    my $password   = $args->{Password};
     my $dbh =
       DBI->connect_cached( $datasource, $username, $password,
         { RaiseError => 1, AutoCommit => 1 } )

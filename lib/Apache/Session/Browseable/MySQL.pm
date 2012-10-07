@@ -12,7 +12,7 @@ use Apache::Session::Browseable::DBI;
 our $VERSION = '0.4';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
-*serialize = \&Apache::Session::Serialize::Storable::serialize;
+*serialize   = \&Apache::Session::Serialize::Storable::serialize;
 *unserialize = \&Apache::Session::Serialize::Storable::unserialize;
 
 sub populate {
@@ -31,6 +31,7 @@ sub populate {
 1;
 
 __END__
+
 =head1 NAME
 
 Apache::Session::Browseable::MySQL - Add index and search methods to
