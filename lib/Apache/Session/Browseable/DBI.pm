@@ -85,12 +85,9 @@ sub _classDbh {
     my $class = shift;
     my $args  = shift;
 
-    my $datasource = $args->{DataSource}
-      || $Apache::Session::Store::MySQL::DataSource;
-    my $username = $args->{UserName}
-      || $Apache::Session::Store::MySQL::UserName;
-    my $password = $args->{Password}
-      || $Apache::Session::Store::MySQL::Password;
+    my $datasource = $args->{DataSource} or die "No datasource given !";
+    my $username = $args->{UserName};
+    my $password = $args->{Password};
     my $dbh =
       DBI->connect_cached( $datasource, $username, $password,
         { RaiseError => 1, AutoCommit => 1 } )
