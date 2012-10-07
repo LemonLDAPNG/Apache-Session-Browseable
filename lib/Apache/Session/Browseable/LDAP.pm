@@ -3,7 +3,7 @@ package Apache::Session::Browseable::LDAP;
 use strict;
 use vars qw(@ISA $VERSION);
 
-$VERSION = '0.2';
+$VERSION = '0.8';
 @ISA     = qw(Apache::Session);
 
 use Apache::Session;
@@ -113,7 +113,7 @@ sub get_key_from_all_sessions {
             my $tmp = $entry->get_value('description');
             next unless ($tmp);
             eval { $tmp = unserialize($tmp); };
-            netx if ($@);
+            next if ($@);
             if ( ref($data) eq 'CODE' ) {
                 $res{$id} = &$data( $tmp, $id );
             }
