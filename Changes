@@ -22,3 +22,6 @@ Revision history for Perl extension Apache::Session::Browseable.
 0.7  Sun Jun 24 09:07:21 2012
     - Add "eval" to avoid errors in unserialize (LDAP)
 
+0.8  Fri Oct 12 06:20:54 2012
+    - storable must not be always used in DBI
+

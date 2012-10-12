@@ -5,7 +5,7 @@ use strict;
 use DBI;
 use Apache::Session;
 
-our $VERSION = '0.2';
+our $VERSION = '0.8';
 our @ISA     = qw(Apache::Session);
 
 sub searchOn {

@@ -9,7 +9,7 @@ use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Storable;
 use Apache::Session::Browseable::DBI;
 
-our $VERSION = '0.4';
+our $VERSION = '0.8';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
 *serialize   = \&Apache::Session::Serialize::Storable::serialize;
