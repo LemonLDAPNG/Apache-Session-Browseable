@@ -22,6 +22,7 @@ sub searchOn {
             "SELECT id,a_session from $table_name where $selectField='$value'");
         $sth->execute;
         while ( my @row = $sth->fetchrow_array ) {
+            no strict 'refs';
             my $sub = "$class::unserialize";
             my $tmp = &$sub( { serialized => $row[1] } );
             if (@fields) {
@@ -64,6 +65,7 @@ sub get_key_from_all_sessions {
     $sth->execute;
     my %res;
     while ( my @row = $sth->fetchrow_array ) {
+        no strict 'refs';
         my $sub = "$class::unserialize";
         my $tmp = &$sub( { serialized => $row[1] } );
         if ( ref($data) eq 'CODE' ) {
