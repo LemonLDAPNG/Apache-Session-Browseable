@@ -59,7 +59,7 @@ sub searchOn {
             sub {
                 my $entry = shift;
                 my $id    = shift;
-                return undef unless ( $entry->{$selectField} eq $value );
+                return undef unless ( defined $entry->{$selectField} and $entry->{$selectField} eq $value );
                 if (@fields) {
                     $res{$id}->{$_} = $entry->{$_} foreach (@fields);
                 }
