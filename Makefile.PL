@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 # the contents of the Makefile that is written.
 WriteMakefile(
     NAME         => 'Apache::Session::Browseable',
-    VERSION      => '0.8',
+    VERSION      => '0.9',
     PREREQ_PM    => { 'Apache::Session' => 0, },
     (
         $] >= 5.005

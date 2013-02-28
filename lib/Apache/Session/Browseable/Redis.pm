@@ -8,7 +8,7 @@ use Apache::Session::Generate::MD5;
 use Apache::Session::Lock::Null;
 use Apache::Session::Serialize::Base64;
 
-our $VERSION = '0.2';
+our $VERSION = '0.9';
 our @ISA     = qw(Apache::Session);
 
 sub populate {
@@ -172,7 +172,10 @@ Xavier Guimard, E<lt>x.guimard@free.frE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2009 by Xavier Guimard
+=encoding utf8
+
+Copyright (C) 2009-2013 by Xavier Guimard
+              2013 by Clément Oudot
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.1 or,

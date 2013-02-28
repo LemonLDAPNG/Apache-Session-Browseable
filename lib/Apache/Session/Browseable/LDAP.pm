@@ -3,7 +3,7 @@ package Apache::Session::Browseable::LDAP;
 use strict;
 use vars qw(@ISA $VERSION);
 
-$VERSION = '0.8';
+$VERSION = '0.9';
 @ISA     = qw(Apache::Session);
 
 use Apache::Session;
@@ -160,7 +160,10 @@ Xavier Guimard, E<lt>x.guimard@free.frE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
+=encoding utf8
+
 Copyright (C) 2009 by Xavier Guimard
+              2013 by Clément Oudot
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.0 or,

@@ -25,3 +25,7 @@ Revision history for Perl extension Apache::Session::Browseable.
 0.8  Fri Oct 12 06:20:54 2012
     - storable must not be always used in DBI
 
+0.9  Thu Feb 28 06:51:51 2013
+    - Fix Undefined value warning with Redis backend
+      (https://github.com/coudot/apache-session-browseable/issues/1)
+    - Update copyright
