@@ -1,5 +1,6 @@
 Changes
 lib/Apache/Session/Browseable.pod
+lib/Apache/Session/Browseable/_common.pm
 lib/Apache/Session/Browseable/DBI.pm
 lib/Apache/Session/Browseable/File.pm
 lib/Apache/Session/Browseable/Informix.pm
@@ -22,4 +23,10 @@ Makefile.PL
 MANIFEST
 META.yml			Module meta-data (added by MakeMaker)
 README
+t/Apache-Session-Browseable-common.t
+t/Apache-Session-Browseable-DBI.t
+t/Apache-Session-Browseable-File.t
+t/Apache-Session-Browseable-LDAP.t
+t/Apache-Session-Browseable-Redis.t
+t/Apache-Session-Browseable-Store-DBI.t
 t/Apache-Session-Browseable-Store-MySQL.t
