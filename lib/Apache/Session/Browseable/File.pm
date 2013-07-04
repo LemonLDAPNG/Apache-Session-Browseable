@@ -7,10 +7,10 @@ use Apache::Session::Lock::File;
 use Apache::Session::Browseable::Store::File;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Storable;
-use Apache::Session::Browseable::DBI;
+use Apache::Session::Browseable::_common;
 
-our $VERSION = '0.3';
-our @ISA     = qw(Apache::Session);
+our $VERSION = '1.0';
+our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
     my $self = shift;
@@ -31,29 +31,6 @@ sub DESTROY {
     $self->save;
     $self->{object_store}->close;
     $self->release_all_locks;
-}
-
-sub searchOn {
-    my ( $class, $args, $selectField, $value, @fields ) = @_;
-
-    # TODO: create an index system
-    my %res = ();
-    $class->get_key_from_all_sessions(
-        $args,
-        sub {
-            my $entry = shift;
-            my $id    = shift;
-            return undef unless ( $entry->{$selectField} eq $value );
-            if (@fields) {
-                $res{$id}->{$_} = $entry->{$_} foreach (@fields);
-            }
-            else {
-                $res{$id} = $entry;
-            }
-            undef;
-        }
-    );
-    return \%res;
 }
 
 sub get_key_from_all_sessions {
