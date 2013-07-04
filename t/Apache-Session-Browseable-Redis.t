@@ -7,7 +7,7 @@ plan skip_all => "Optional modules (Redis) not installed"
 
 plan tests => 1;
 
-$package = 'Apache::Session::Browseable::Store::Redis';
+$package = 'Apache::Session::Browseable::Redis';
 
 use_ok($package);
 
