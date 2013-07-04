@@ -5,18 +5,24 @@ use AutoLoader 'AUTOLOAD';
 
 our $VERSION = '1.0';
 
-1;
-
 sub _tabInTab {
-    my($class,$t1,$t2)=@_;
-    foreach my $f(@$t1) {
-        unless ( grep { $_ eq $f } @$t2){
+    my ( $class, $t1, $t2 ) = @_;
+    foreach my $f (@$t1) {
+        unless ( grep { $_ eq $f } @$t2 ) {
             return 0;
         }
     }
     return 1;
 }
 
+sub _fieldIsIndexed {
+    my ( $class, $args, $field ) = @_;
+    my $index =
+      ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
+    return ( grep { $_ eq $field } @$index );
+}
+
+1;
 __END__
 
 sub searchOn {
