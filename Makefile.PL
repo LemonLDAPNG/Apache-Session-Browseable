@@ -5,6 +5,12 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME         => 'Apache::Session::Browseable',
     VERSION      => '0.9',
+    META_MERGE   => {
+        'recommends' => {
+            'DBI'       => 0,
+            'Net::LDAP' => 0.38,
+        },
+    },
     PREREQ_PM    => { 'Apache::Session' => 0, },
     (
         $] >= 5.005
