@@ -4,9 +4,10 @@ use strict;
 
 use DBI;
 use Apache::Session;
+use Apache::Session::Browseable::_common;
 
-our $VERSION = '0.8';
-our @ISA     = qw(Apache::Session);
+our $VERSION = '1.0';
+our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;

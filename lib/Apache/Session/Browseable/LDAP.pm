@@ -1,17 +1,17 @@
 package Apache::Session::Browseable::LDAP;
 
 use strict;
-use vars qw(@ISA $VERSION);
-
-$VERSION = '0.9';
-@ISA     = qw(Apache::Session);
 
 use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::LDAP;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Base64;
+use Apache::Session::Browseable::_common;
 use Net::LDAP::Util;
+
+our $VERSION = '1.0';
+our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
     my $self = shift;

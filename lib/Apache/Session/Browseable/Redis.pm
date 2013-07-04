@@ -7,9 +7,10 @@ use Apache::Session::Browseable::Store::Redis;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Lock::Null;
 use Apache::Session::Serialize::Base64;
+use Apache::Session::Browseable::_common;
 
 our $VERSION = '0.9';
-our @ISA     = qw(Apache::Session);
+our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
     my $self = shift;
