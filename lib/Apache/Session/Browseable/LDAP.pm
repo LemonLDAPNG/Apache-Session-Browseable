@@ -11,6 +11,7 @@ use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::LDAP;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Base64;
+use Net::LDAP::Util;
 
 sub populate {
     my $self = shift;
@@ -35,6 +36,8 @@ sub unserialize {
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
 
+    $selectField = escape_filter_value($selectField);
+    $value = escape_filter_value($value);
     my %res = ();
     my $index =
       ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
