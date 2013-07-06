@@ -32,7 +32,7 @@ use_ok('Apache::Session::Browseable::SQLite');
 my %session;
 ok(
     tie %session, 'Apache::Session::Browseable::SQLite',
-    undef, { DataSource => "dbi:SQLite:$dbfile", }
+    undef, { DataSource => "dbi:SQLite:$dbfile", Index => '' }
 );
 
 ok( $session{a} = 'foo' );
