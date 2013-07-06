@@ -9,6 +9,7 @@ lib/Apache/Session/Browseable/MySQL.pm
 lib/Apache/Session/Browseable/Oracle.pm
 lib/Apache/Session/Browseable/Postgres.pm
 lib/Apache/Session/Browseable/Redis.pm
+lib/Apache/Session/Browseable/SQLite.pm
 lib/Apache/Session/Browseable/Store/DBI.pm
 lib/Apache/Session/Browseable/Store/File.pm
 lib/Apache/Session/Browseable/Store/Informix.pm
@@ -17,6 +18,7 @@ lib/Apache/Session/Browseable/Store/MySQL.pm
 lib/Apache/Session/Browseable/Store/Oracle.pm
 lib/Apache/Session/Browseable/Store/Postgres.pm
 lib/Apache/Session/Browseable/Store/Redis.pm
+lib/Apache/Session/Browseable/Store/SQLite.pm
 lib/Apache/Session/Browseable/Store/Sybase.pm
 lib/Apache/Session/Browseable/Sybase.pm
 Makefile.PL
@@ -28,5 +30,6 @@ t/Apache-Session-Browseable-DBI.t
 t/Apache-Session-Browseable-File.t
 t/Apache-Session-Browseable-LDAP.t
 t/Apache-Session-Browseable-Redis.t
+t/Apache-Session-Browseable-SQLite.t
 t/Apache-Session-Browseable-Store-DBI.t
 t/Apache-Session-Browseable-Store-MySQL.t
