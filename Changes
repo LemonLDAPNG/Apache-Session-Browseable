@@ -29,3 +29,12 @@ Revision history for Perl extension Apache::Session::Browseable.
     - Fix Undefined value warning with Redis backend
       (https://github.com/coudot/apache-session-browseable/issues/1)
     - Update copyright
+
+1.0  Sat Jul 06 19:57:46 2013
+    - Add SQLite support
+    - Corrects POD ($args was forgotten)
+    - Add searchOnExpr() sub
+    - Optimize SQL queries when only indexed files are required
+    - Create _common.pm lib for unoptimized functions
+    - Add basic tests for all libs
+    - Add advanced tests using SQLite backend
