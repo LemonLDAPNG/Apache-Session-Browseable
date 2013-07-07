@@ -1,25 +1,84 @@
---- #YAML:1.0
-name:               Apache-Session-Browseable
-version:            0.9
-abstract:           Add index and search methods to Apache::Session
+---
+abstract: 'Add index and search methods to Apache::Session'
 author:
-    - Xavier Guimard <x.guimard@free.fr>
-license:            unknown
-distribution_type:  module
+  - 'Xavier Guimard, E<lt>x.guimard@free.frE<gt>'
+build_requires: {}
 configure_requires:
-    ExtUtils::MakeMaker:  0
-build_requires:
-    ExtUtils::MakeMaker:  0
-requires:
-    Apache::Session:  0
-no_index:
-    directory:
-        - t
-        - inc
-generated_by:       ExtUtils::MakeMaker version 6.57_05
+  Module::Build: 0.40
+dynamic_config: 1
+generated_by: 'Module::Build version 0.4005, CPAN::Meta::Converter version 2.120921'
+license: perl
 meta-spec:
-    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
-    version:  1.4
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Apache-Session-Browseable
+provides:
+  Apache::Session::Browseable::DBI:
+    file: lib/Apache/Session/Browseable/DBI.pm
+    version: 1.0
+  Apache::Session::Browseable::File:
+    file: lib/Apache/Session/Browseable/File.pm
+    version: 1.0
+  Apache::Session::Browseable::Informix:
+    file: lib/Apache/Session/Browseable/Informix.pm
+    version: 0.8
+  Apache::Session::Browseable::LDAP:
+    file: lib/Apache/Session/Browseable/LDAP.pm
+    version: 1.0
+  Apache::Session::Browseable::MySQL:
+    file: lib/Apache/Session/Browseable/MySQL.pm
+    version: 0.9
+  Apache::Session::Browseable::Oracle:
+    file: lib/Apache/Session/Browseable/Oracle.pm
+    version: 0.8
+  Apache::Session::Browseable::Postgres:
+    file: lib/Apache/Session/Browseable/Postgres.pm
+    version: 0.8
+  Apache::Session::Browseable::Redis:
+    file: lib/Apache/Session/Browseable/Redis.pm
+    version: 1.0
+  Apache::Session::Browseable::SQLite:
+    file: lib/Apache/Session/Browseable/SQLite.pm
+    version: 1.0
+  Apache::Session::Browseable::Store::DBI:
+    file: lib/Apache/Session/Browseable/Store/DBI.pm
+    version: 0
+  Apache::Session::Browseable::Store::File:
+    file: lib/Apache/Session/Browseable/Store/File.pm
+    version: 0
+  Apache::Session::Browseable::Store::Informix:
+    file: lib/Apache/Session/Browseable/Store/Informix.pm
+    version: 0.1
+  Apache::Session::Browseable::Store::LDAP:
+    file: lib/Apache/Session/Browseable/Store/LDAP.pm
+    version: 0.1
+  Apache::Session::Browseable::Store::MySQL:
+    file: lib/Apache/Session/Browseable/Store/MySQL.pm
+    version: 0.1
+  Apache::Session::Browseable::Store::Oracle:
+    file: lib/Apache/Session/Browseable/Store/Oracle.pm
+    version: 0.1
+  Apache::Session::Browseable::Store::Postgres:
+    file: lib/Apache/Session/Browseable/Store/Postgres.pm
+    version: 0.1
+  Apache::Session::Browseable::Store::Redis:
+    file: lib/Apache/Session/Browseable/Store/Redis.pm
+    version: 1.0
+  Apache::Session::Browseable::Store::SQLite:
+    file: lib/Apache/Session/Browseable/Store/SQLite.pm
+    version: 1.0
+  Apache::Session::Browseable::Store::Sybase:
+    file: lib/Apache/Session/Browseable/Store/Sybase.pm
+    version: 0.1
+  Apache::Session::Browseable::Sybase:
+    file: lib/Apache/Session/Browseable/Sybase.pm
+    version: 0.8
 recommends:
-    DBI:        0
-    Net::LDAP:  0.38
+  DBI: 0
+  Net::LDAP: 0.38
+resources:
+  license: http://dev.perl.org/licenses/
+version: 1.0
+x_test_requires:
+  DBD::SQLite: 0
+  DBI: 0
