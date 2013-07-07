@@ -70,29 +70,5 @@ sub searchOnExpr {
     return \%res;
 }
 
-sub iSearchOnExpr {
-    my ( $class, $args, $selectField, $value, @fields ) = splice @_;
-    $value = quotemeta($value);
-    $value =~ s/\\\*/\.\*/g;
-    $value = qr/^$value$/i;
-    my %res = ();
-    $class->get_key_from_all_sessions(
-        $args,
-        sub {
-            my $entry = shift;
-            my $id    = shift;
-            return undef unless ( $entry->{$selectField} =~ $value );
-            if (@fields) {
-                $res{$id}->{$_} = $entry->{$_} foreach (@fields);
-            }
-            else {
-                $res{$id} = $entry;
-            }
-            undef;
-        }
-    );
-    return \%res;
-}
-
 1;
 
