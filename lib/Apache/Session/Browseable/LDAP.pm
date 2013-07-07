@@ -36,57 +36,63 @@ sub unserialize {
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
 
-    $selectField = escape_filter_value($selectField);
-    $value = escape_filter_value($value);
-    my %res = ();
     my $index =
       ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
     if ( grep { $_ eq $selectField } @$index ) {
-        my $ldap =
-          Apache::Session::Browseable::Store::LDAP::ldap( { args => $args } );
-        my $msg = $ldap->search(
-            base => $args->{ldapConfBase},
-            filter =>
-              "(&(objectClass=applicationProcess)(ou=${selectField}_$value))",
-
-            #scope => 'base',
-            attrs => [ 'description', 'cn' ],
-        );
-        if ( $msg->code ) {
-            Apache::Session::Browseable::Store::LDAP->logError($msg);
-        }
-        else {
-            foreach my $entry ( $msg->entries ) {
-                my $id = $entry->get_value('cn') or die;
-                my $tmp = $entry->get_value('description');
-                next unless ($tmp);
-                eval { $tmp = unserialize($tmp); };
-                next if ($@);
-                if (@fields) {
-                    $res{$id}->{$_} = $tmp->{$_} foreach (@fields);
-                }
-                else {
-                    $res{$id} = $tmp;
-                }
-            }
-        }
+        ( $selectField, $value ) = escape_filter_value( $selectField, $value );
+        return $class->_query( $args, $selectField, $value, @fields );
     }
     else {
-        $class->get_key_from_all_sessions(
-            $args,
-            sub {
-                my $entry = shift;
-                my $id    = shift;
-                return undef unless ( $entry->{$selectField} eq $value );
-                if (@fields) {
-                    $res{$id}->{$_} = $entry->{$_} foreach (@fields);
-                }
-                else {
-                    $res{$id} = $entry;
-                }
-                undef;
+        return $class->SUPER::searchOn( $args, $selectField, $value, @fields );
+    }
+}
+
+sub searchOnExpr {
+    my ( $class, $args, $selectField, $value, @fields ) = @_;
+
+    my $index =
+      ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
+    if ( grep { $_ eq $selectField } @$index ) {
+        ( $selectField, $value ) = escape_filter_value( $selectField, $value );
+        $value =~ s/\\2a/\*/gi;
+        return $class->_query( $args, $selectField, $value, @fields );
+    }
+    else {
+        return $class->SUPER::searchOn( $args, $selectField, $value, @fields );
+    }
+}
+
+sub _query {
+    my ( $class, $args, $selectField, $value, @fields ) = @_;
+
+    my %res = ();
+    my $ldap =
+      Apache::Session::Browseable::Store::LDAP::ldap( { args => $args } );
+    my $msg = $ldap->search(
+        base => $args->{ldapConfBase},
+        filter =>
+          "(&(objectClass=applicationProcess)(ou=${selectField}_$value))",
+
+        #scope => 'base',
+        attrs => [ 'description', 'cn' ],
+    );
+    if ( $msg->code ) {
+        Apache::Session::Browseable::Store::LDAP->logError($msg);
+    }
+    else {
+        foreach my $entry ( $msg->entries ) {
+            my $id = $entry->get_value('cn') or die;
+            my $tmp = $entry->get_value('description');
+            next unless ($tmp);
+            eval { $tmp = unserialize($tmp); };
+            next if ($@);
+            if (@fields) {
+                $res{$id}->{$_} = $tmp->{$_} foreach (@fields);
             }
-        );
+            else {
+                $res{$id} = $tmp;
+            }
+        }
     }
     return \%res;
 }

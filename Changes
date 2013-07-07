@@ -33,7 +33,9 @@ Revision history for Perl extension Apache::Session::Browseable.
 1.0  Sat Jul 06 19:57:46 2013
     - Add SQLite support
     - Corrects POD ($args was forgotten)
-    - Add searchOnExpr() sub
+    - Add searchOnExpr() sub:
+      - default implementation in _common
+      - optimized implementation in LDAP and DBI
     - Optimize SQL queries when only indexed files are required
     - Create _common.pm lib for unoptimized functions
     - Add basic tests for all libs
