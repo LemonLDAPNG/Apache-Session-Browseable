@@ -3,14 +3,14 @@
 use strict;
 use warnings;
 use Test::More;
+use File::Temp qw(mktemp);
 
-my $dbfile = 'tmp.db';
+my $dbfile = mktemp('tmp.db_XXXX');
 
 plan skip_all => "DBD::SQLite is needed for this test"
   unless eval {
     require DBI;
     require DBD::SQLite;
-    unlink 'tmp.db' if ( -e 'tmp.db' );
     1;
   };
 
@@ -128,6 +128,8 @@ ok(
         $args, 'f1', '1_aa', 'f1', 'f3'
     )
 );
+
+unlink $dbfile if ( -e $dbfile );
 
 while ( my ( $id, $entry ) = each %$res ) {
     ok( $entry->{f1} =~ /^1_(\w{2})$/ );

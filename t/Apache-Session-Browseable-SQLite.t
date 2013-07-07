@@ -3,14 +3,14 @@
 
 use strict;
 use Test::More;
+use File::Temp qw(mktemp);
 
-my $dbfile = 'tmp.db';
+my $dbfile = mktemp('tmp.db_XXXX');
 
 plan skip_all => "DBD::SQLite is needed for this test"
   unless eval {
     require DBI;
     require DBD::SQLite;
-    unlink 'tmp.db' if ( -e 'tmp.db' );
     1;
   };
 
@@ -46,4 +46,6 @@ ok(
 );
 
 ok( $session{a} eq 'foo' );
+
+unlink $dbfile if ( -e $dbfile );
 
