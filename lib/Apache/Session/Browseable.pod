@@ -29,10 +29,20 @@ Apache::Session::Browseable - Add index and search methods to Apache::Session
   # Apache::Session::Browseable add some global class methods
   #
   # 1) search on a field (indexed or not)
+  # a. get full sessions
   my $hash = Apache::Session::Browseable::MySQL->searchOn( $args, 'uid', 'me' );
   foreach my $id (keys %$hash) {
     print $id . ":" . $hash->{$id}->{mail} . "\n";
   }
+  # b. get only some fields
+  my $hash = Apache::Session::Browseable::MySQL->searchOn( $args, 'uid', 'me', 'mail', 'uid' );
+  foreach my $id (keys %$hash) {
+    print $id . ":" . $hash->{$id}->{mail} . "\n";
+    print "       " . $hash->{$id}->{uid} . "\n";
+  }
+  # c. search with a pattern
+  my $hash = Apache::Session::Browseable::MySQL->searchOnExpr( $args, 'uid', 'm*' );
+  ...
 
   # 2) Parse all sessions
   # a. get all sessions
