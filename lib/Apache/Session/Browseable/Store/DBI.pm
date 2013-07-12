@@ -19,7 +19,7 @@ sub insert {
     if ( !defined $self->{insert_sth} ) {
         $self->{insert_sth} =
           $self->{dbh}->prepare_cached( "INSERT INTO $self->{table_name} ("
-              . join( ',', 'id', 'a_session', @$index )
+              . join( ',', 'id', 'a_session', map { s/'/''/g; $_ } @$index )
               . ') VALUES ('
               . join( ',', ('?') x ( 2 + @$index ) )
               . ')' );

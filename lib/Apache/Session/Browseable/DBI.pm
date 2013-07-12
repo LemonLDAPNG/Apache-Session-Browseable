@@ -18,7 +18,7 @@ sub searchOn {
     $selectField =~ s/'/''/g;
     if ( $class->_fieldIsIndexed( $args, $selectField ) ) {
         return $class->_query( $args, $selectField, $value,
-            "$selectField='$value'", @fields );
+            { query => "$selectField=?", values => [$value] }, @fields );
     }
     else {
         return $class->SUPER::searchOn(@_);
@@ -35,7 +35,7 @@ sub searchOnExpr {
     if ( $class->_fieldIsIndexed( $args, $selectField ) ) {
         $value =~ s/\*/%/g;
         return $class->_query( $args, $selectField, $value,
-            "$selectField like '$value'", @fields );
+            { query => "$selectField like ?", values => [$value] }, @fields );
     }
     else {
         return $class->SUPER::searchOnExpr(@_);
@@ -59,16 +59,18 @@ sub _query {
     my $sth;
     if ($indexed) {
         my $fields = join( ',', 'id', map { s/'//g; $_ } @fields );
-        $sth = $dbh->prepare("SELECT $fields from $table_name where $query");
-        $sth->execute;
+        $sth = $dbh->prepare(
+            "SELECT $fields from $table_name where $query->{query}");
+        $sth->execute( @{ $query->{values} } );
         return $sth->fetchall_hashref('id');
     }
 
     # Case 1: at least one field isn't indexed, decoding is needed
     else {
         $sth =
-          $dbh->prepare("SELECT id,a_session from $table_name where $query");
-        $sth->execute;
+          $dbh->prepare(
+            "SELECT id,a_session from $table_name where $query->{query}");
+        $sth->execute( @{ $query->{values} } );
         while ( my @row = $sth->fetchrow_array ) {
             no strict 'refs';
             my $sub = "${class}::unserialize";
@@ -106,8 +108,10 @@ sub get_key_from_all_sessions {
 
         # OK, all fields are indexed
         if ($indexed) {
-            my $sth = $dbh->prepare_cached(
-                'SELECT id,' . join( ',', @$data ) . " from $table_name" );
+            my $sth =
+              $dbh->prepare_cached( 'SELECT id,'
+                  . join( ',', map { s/'/''/g; $_ } @$data )
+                  . " from $table_name" );
             $sth->execute;
             return $sth->fetchall_hashref('id');
         }
