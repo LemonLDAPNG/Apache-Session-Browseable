@@ -8,7 +8,7 @@ use Apache::Session::Browseable::Store::LDAP;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Base64;
 use Apache::Session::Browseable::_common;
-use Net::LDAP::Util;
+use Net::LDAP::Util qw(escape_filter_value);
 
 our $VERSION = '1.0';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
