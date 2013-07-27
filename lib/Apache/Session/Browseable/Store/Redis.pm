@@ -16,6 +16,10 @@ sub new {
 
     $self->{cache} = Redis->new( %{ $session->{args} } );
 
+    # Manage database
+    $self->{cache}->select( $session->{args}->{database} )
+      if defined $session->{args}->{database};
+
     bless $self, $class;
 }
 

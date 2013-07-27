@@ -44,7 +44,11 @@ sub searchOn {
       ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
     if ( grep { $_ eq $selectField } @$index ) {
         my $redisObj = Redis->new(%$args);
-        my @keys     = $redisObj->smembers("${selectField}_$value");
+
+        # Manage database
+        $redisObj->select( $args->{database} ) if defined $args->{database};
+
+        my @keys = $redisObj->smembers("${selectField}_$value");
         foreach my $k (@keys) {
             next unless ($k);
             my $tmp = $redisObj->get($k);
@@ -92,7 +96,11 @@ sub get_key_from_all_sessions {
 
     # TODO new Redis object
     my $redisObj = Redis->new(%$args);
-    my @keys     = $redisObj->keys('*');
+
+    # Manage database
+    $redisObj->select( $args->{database} ) if defined $args->{database};
+
+    my @keys = $redisObj->keys('*');
     foreach my $k (@keys) {
         next if ( !$k or $k =~ /_/ );
         my $v   = $redisObj->get($k);
