@@ -40,3 +40,6 @@ Revision history for Perl extension Apache::Session::Browseable.
     - Create _common.pm lib for unoptimized functions
     - Add basic tests for all libs
     - Add advanced tests using SQLite backend
+
+1.0.1  Fri Aug 30 06:40:02 2013
+    - Add Apache::Session in required dependencies (was ommited in 1.0)
