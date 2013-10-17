@@ -8,6 +8,7 @@ use Apache::Session::Browseable::Store::File;
 use Apache::Session::Generate::MD5;
 use Apache::Session::Serialize::Storable;
 use Apache::Session::Browseable::_common;
+use Storable qw(thaw);
 
 our $VERSION = '1.0';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
