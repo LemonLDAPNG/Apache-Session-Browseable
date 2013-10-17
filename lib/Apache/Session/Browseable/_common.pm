@@ -7,6 +7,9 @@ our $VERSION = '1.0';
 
 sub _tabInTab {
     my ( $class, $t1, $t2 ) = @_;
+
+    # if no fields are required, return 0
+    return 0 unless(@$t1 and @$t2);
     foreach my $f (@$t1) {
         unless ( grep { $_ eq $f } @$t2 ) {
             return 0;

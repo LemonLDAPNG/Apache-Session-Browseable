@@ -43,3 +43,7 @@ Revision history for Perl extension Apache::Session::Browseable.
 
 1.0.1  Fri Aug 30 06:40:02 2013
     - Add Apache::Session in required dependencies (was ommited in 1.0)
+
+1.0.2  Thu Oct 17 20:27:24 2013
+    - _common::_tabInTab() must return 0 if no fields are required
+      Closes http://jira.ow2.org/browse/LEMONLDAP-627
