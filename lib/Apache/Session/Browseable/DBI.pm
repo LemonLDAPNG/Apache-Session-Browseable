@@ -73,7 +73,8 @@ sub _query {
         $sth->execute( @{ $query->{values} } );
         while ( my @row = $sth->fetchrow_array ) {
             no strict 'refs';
-            my $sub = "${class}::unserialize";
+            my $self = eval "&${class}::populate();";
+            my $sub = $self->{unserialized};
             my $tmp = &$sub( { serialized => $row[1] } );
             if (@fields) {
                 $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@fields);
@@ -121,7 +122,8 @@ sub get_key_from_all_sessions {
     my %res;
     while ( my @row = $sth->fetchrow_array ) {
         no strict 'refs';
-        my $sub = "${class}::unserialize";
+        my $self = eval "&${class}::populate();";
+        my $sub = $self->{unserialized};
         my $tmp = &$sub( { serialized => $row[1] } );
         if ( ref($data) eq 'CODE' ) {
             $tmp = &$data( $tmp, $row[0] );

@@ -23,9 +23,6 @@ use Apache::Session::Browseable::DBI;
 our $VERSION = '1.0';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
-*serialize   = \&Apache::Session::Serialize::Base64::serialize;
-*unserialize = \&Apache::Session::Serialize::Base64::unserialize;
-
 sub populate {
     my $self = shift;
 
@@ -34,8 +31,8 @@ sub populate {
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::MD5::generate;
     $self->{validate}     = \&Apache::Session::Generate::MD5::validate;
-    $self->{serialize}    = \&serialize;
-    $self->{unserialize}  = \&unserialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::Base64::serialize;
+    $self->{unserialize}  = \&Apache::Session::Serialize::Base64::unserialize;
 
     return $self;
 }
