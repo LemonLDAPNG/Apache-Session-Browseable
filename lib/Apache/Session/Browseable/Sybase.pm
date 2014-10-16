@@ -23,8 +23,8 @@ sub populate {
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::MD5::generate;
     $self->{validate}     = \&Apache::Session::Generate::MD5::validate;
-    $self->{serialize}    = \&serialize;
-    $self->{unserialize}  = \&unserialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::Sybase::serialize;
+    $self->{unserialize}  = \&Apache::Session::Serialize::Sybase::unserialize;
 
     return $self;
 }
