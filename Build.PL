@@ -10,4 +10,5 @@ Module::Build->new(
     test_requires => { DBI => 0, 'DBD::SQLite' => 0, },
     dist_version  => '1.0.2',
     autosplit     => [qw(lib/Apache/Session/Browseable/_common.pm)],
+    configure_requires => { 'Module::Build' => 0, },
 )->create_build_script;

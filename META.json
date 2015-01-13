@@ -4,7 +4,7 @@
       "Xavier Guimard, E<lt>x.guimard@free.frE<gt>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4005, CPAN::Meta::Converter version 2.120921",
+   "generated_by" : "Module::Build version 0.421",
    "license" : [
       "perl_5"
    ],
@@ -16,7 +16,7 @@
    "prereqs" : {
       "configure" : {
          "requires" : {
-            "Module::Build" : "0.36"
+            "Module::Build" : "0"
          }
       },
       "runtime" : {
@@ -74,11 +74,11 @@
       },
       "Apache::Session::Browseable::Store::DBI" : {
          "file" : "lib/Apache/Session/Browseable/Store/DBI.pm",
-         "version" : "0"
+         "version" : "1"
       },
       "Apache::Session::Browseable::Store::File" : {
          "file" : "lib/Apache/Session/Browseable/Store/File.pm",
-         "version" : "0"
+         "version" : "0.1"
       },
       "Apache::Session::Browseable::Store::Informix" : {
          "file" : "lib/Apache/Session/Browseable/Store/Informix.pm",
@@ -123,9 +123,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "1.0",
-   "x_test_requires" : {
-      "DBD::SQLite" : "0",
-      "DBI" : "0"
-   }
+   "version" : "v1.0.2"
 }
