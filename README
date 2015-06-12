@@ -1,4 +1,4 @@
-Apache-Session-Browseable version 1.0
+Apache-Session-Browseable version 1.1
 ======================================
 
 This module is an Apache::Session implementation allowing to define index to speed up searches.
@@ -15,7 +15,7 @@ To install this module type the following:
 COPYRIGHT AND LICENCE
 
 Copyright (C) 2009-2013 by Xavier Guimard,
-              2013 by Clément Oudot
+              2013-2015 by Clement Oudot
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.1 or,
