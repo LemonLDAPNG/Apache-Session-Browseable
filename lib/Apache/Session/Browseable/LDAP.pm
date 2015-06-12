@@ -10,7 +10,7 @@ use Apache::Session::Serialize::Base64;
 use Apache::Session::Browseable::_common;
 use Net::LDAP::Util qw(escape_filter_value);
 
-our $VERSION = '1.0';
+our $VERSION = '1.1';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
@@ -76,6 +76,9 @@ sub _query {
         #scope => 'base',
         attrs => [ 'description', 'cn' ],
     );
+
+    $ldap->unbind() && delete $ldap;
+
     if ( $msg->code ) {
         Apache::Session::Browseable::Store::LDAP->logError($msg);
     }
@@ -113,6 +116,9 @@ sub get_key_from_all_sessions {
         filter => '(&(objectClass=applicationProcess)(ou=*))',
         attrs  => [ 'cn', 'description' ],
     );
+
+    $ldap->unbind() && delete $ldap;
+
     if ( $msg->code ) {
         Apache::Session::Browseable::Store::LDAP->logError($msg);
     }
@@ -172,7 +178,7 @@ Xavier Guimard, E<lt>x.guimard@free.frE<gt>
 =encoding utf8
 
 Copyright (C) 2009 by Xavier Guimard
-              2013 by Clément Oudot
+Copyright (C) 2013, 2015 by Clement Oudot
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.0 or,
