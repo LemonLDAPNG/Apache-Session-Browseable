@@ -64,17 +64,23 @@ sub searchOnExpr {
 
 sub _query {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
+    $args->{ldapObjectClass}      ||= 'applicationProcess';
+    $args->{ldapAttributeId}      ||= 'cn';
+    $args->{ldapAttributeContent} ||= 'description';
+    $args->{ldapAttributeIndex}   ||= 'ou';
 
     my %res = ();
     my $ldap =
       Apache::Session::Browseable::Store::LDAP::ldap( { args => $args } );
     my $msg = $ldap->search(
-        base => $args->{ldapConfBase},
-        filter =>
-          "(&(objectClass=applicationProcess)(ou=${selectField}_$value))",
+        base   => $args->{ldapConfBase},
+        filter => "(&(objectClass="
+          . $args->{ldapObjectClass} . ")("
+          . $args->{ldapAttributeIndex}
+          . "=${selectField}_$value))",
 
         #scope => 'base',
-        attrs => [ 'description', 'cn' ],
+        attrs => [ $args->{ldapAttributeContent}, $args->{ldapAttributeId} ],
     );
 
     $ldap->unbind();
@@ -84,8 +90,8 @@ sub _query {
     }
     else {
         foreach my $entry ( $msg->entries ) {
-            my $id = $entry->get_value('cn') or die;
-            my $tmp = $entry->get_value('description');
+            my $id = $entry->get_value( $args->{ldapAttributeId} ) or die;
+            my $tmp = $entry->get_value( $args->{ldapAttributeContent} );
             next unless ($tmp);
             eval { $tmp = unserialize($tmp); };
             next if ($@);
@@ -104,6 +110,11 @@ sub get_key_from_all_sessions {
     my $class = shift;
     my $args  = shift;
     my $data  = shift;
+    $args->{ldapObjectClass}      ||= 'applicationProcess';
+    $args->{ldapAttributeId}      ||= 'cn';
+    $args->{ldapAttributeContent} ||= 'description';
+    $args->{ldapAttributeIndex}   ||= 'ou';
+
     my %res;
 
     my $ldap =
@@ -113,8 +124,11 @@ sub get_key_from_all_sessions {
 
      # VERY STRANGE BUG ! With this filter, description isn't base64 encoded !!!
      #filter => '(objectClass=applicationProcess)',
-        filter => '(&(objectClass=applicationProcess)(ou=*))',
-        attrs  => [ 'cn', 'description' ],
+
+        filter => '(&(objectClass='
+          . $args->{ldapObjectClass} . ')('
+          . $args->{ldapAttributeIndex} . '=*))',
+        attrs => [ $args->{ldapAttributeId}, $args->{ldapAttributeContent} ],
     );
 
     $ldap->unbind();
@@ -124,8 +138,8 @@ sub get_key_from_all_sessions {
     }
     else {
         foreach my $entry ( $msg->entries ) {
-            my $id = $entry->get_value('cn') or die;
-            my $tmp = $entry->get_value('description');
+            my $id = $entry->get_value( $args->{ldapAttributeId} ) or die;
+            my $tmp = $entry->get_value( $args->{ldapAttributeContent} );
             next unless ($tmp);
             eval { $tmp = unserialize($tmp); };
             next if ($@);
@@ -157,11 +171,15 @@ Apache::Session::Browseable::LDAP - An implementation of Apache::Session::LDAP
 
   use Apache::Session::Browseable::LDAP;
   tie %hash, 'Apache::Session::Browseable::LDAP', $id, {
-    ldapServer       => 'ldap://localhost:389',
-    ldapConfBase     => 'dmdName=applications,dc=example,dc=com',
-    ldapBindDN       => 'cn=admin,dc=example,dc=com',
-    ldapBindPassword => 'pass',
-    Index            => 'uid ipAddr',
+    ldapServer           => 'ldap://localhost:389',
+    ldapConfBase         => 'dmdName=applications,dc=example,dc=com',
+    ldapBindDN           => 'cn=admin,dc=example,dc=com',
+    ldapBindPassword     => 'pass',
+    Index                => 'uid ipAddr',
+    ldapObjectClass      => 'applicationProcess',
+    ldapAttributeId      => 'cn',
+    ldapAttributeContent => 'description',
+    ldapAttributeIndex   => 'ou',
   };
 
 =head1 DESCRIPTION

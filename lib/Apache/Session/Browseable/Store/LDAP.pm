@@ -14,27 +14,36 @@ sub insert {
     my $self    = shift;
     my $session = shift;
     $self->{args} = $session->{args};
+    $self->{args}->{ldapObjectClass}      ||= 'applicationProcess';
+    $self->{args}->{ldapAttributeId}      ||= 'cn';
+    $self->{args}->{ldapAttributeContent} ||= 'description';
+    $self->{args}->{ldapAttributeIndex}   ||= 'ou';
+
     my $index =
       ref( $session->{args}->{Index} )
       ? $session->{args}->{Index}
       : [ split /\s+/, $session->{args}->{Index} ];
     my $id = $session->{data}->{_session_id};
 
-    my $ou;
+    my $attrIndex;
     foreach my $i (@$index) {
         my $t;
         next unless ( $t = $session->{data}->{$i} );
-        push @$ou, "${i}_$t";
+        push @$attrIndex, "${i}_$t";
     }
     my $attrs = [
-        objectClass => [ 'top', 'applicationProcess' ],
-        cn          => $session->{data}->{_session_id},
-        description => $session->{serialized},
+        objectClass                      => $self->{args}->{ldapObjectClass},
+        $self->{args}->{ldapAttributeId} => $session->{data}->{_session_id},
+        $self->{args}->{ldapAttributeContent} => $session->{serialized},
     ];
-    push @$attrs, ( ou => $ou ) if ($ou);
+    push @$attrs, ( $self->{args}->{ldapAttributeIndex} => $attrIndex )
+      if ($attrIndex);
 
-    my $msg = $self->ldap->add( "cn=$id," . $self->{args}->{ldapConfBase},
-        attrs => $attrs, );
+    my $msg = $self->ldap->add(
+        $self->{args}->{ldapAttributeId} . "=$id,"
+          . $self->{args}->{ldapConfBase},
+        attrs => $attrs,
+    );
 
     $self->ldap->unbind() && delete $self->{ldap};
     $self->logError($msg) if ( $msg->code );
@@ -44,24 +53,35 @@ sub update {
     my $self    = shift;
     my $session = shift;
     $self->{args} = $session->{args};
+    $self->{args}->{ldapObjectClass}      ||= 'applicationProcess';
+    $self->{args}->{ldapAttributeId}      ||= 'cn';
+    $self->{args}->{ldapAttributeContent} ||= 'description';
+    $self->{args}->{ldapAttributeIndex}   ||= 'ou';
+
     my $index =
       ref( $session->{args}->{Index} )
       ? $session->{args}->{Index}
       : [ split /\s+/, $session->{args}->{Index} ];
     my $id = $session->{data}->{_session_id};
 
-    my $ou;
+    my $attrIndex;
     foreach my $i (@$index) {
         my $t;
         next unless ( $t = $session->{data}->{$i} );
-        push @$ou, "${i}_$t";
+        push @$attrIndex, "${i}_$t";
     }
-    my $attrs = { description => $session->{serialized} };
-    $attrs->{ou} = $ou if ($ou);
+
+    my $attrs =
+      { $self->{args}->{ldapAttributeContent} => $session->{serialized} };
+    $attrs->{ $self->{args}->{ldapAttributeIndex} } = $attrIndex
+      if ($attrIndex);
 
     my $msg = $self->ldap->modify(
-        "cn=$session->{data}->{_session_id}," . $self->{args}->{ldapConfBase},
-        replace => $attrs, );
+        $self->{args}->{ldapAttributeId} . "="
+          . $session->{data}->{_session_id} . ","
+          . $self->{args}->{ldapConfBase},
+        replace => $attrs,
+    );
 
     $self->ldap->unbind() && delete $self->{ldap};
     $self->logError($msg) if ( $msg->code );
@@ -71,20 +91,26 @@ sub materialize {
     my $self    = shift;
     my $session = shift;
     $self->{args} = $session->{args};
+    $self->{args}->{ldapObjectClass}      ||= 'applicationProcess';
+    $self->{args}->{ldapAttributeId}      ||= 'cn';
+    $self->{args}->{ldapAttributeContent} ||= 'description';
+    $self->{args}->{ldapAttributeIndex}   ||= 'ou';
 
     my $msg = $self->ldap->search(
-        base => "cn=$session->{data}->{_session_id},"
+        base => $self->{args}->{ldapAttributeId} . "="
+          . $session->{data}->{_session_id} . ","
           . $self->{args}->{ldapConfBase},
-        filter => '(objectClass=applicationProcess)',
+        filter => '(objectClass=' . $self->{args}->{ldapObjectClass} . ')',
         scope  => 'base',
-        attrs  => ['description'],
+        attrs  => [ $self->{args}->{ldapAttributeContent} ],
     );
 
     $self->ldap->unbind() && delete $self->{ldap};
     $self->logError($msg) if ( $msg->code );
 
     eval {
-        $session->{serialized} = $msg->shift_entry()->get_value('description');
+        $session->{serialized} = $msg->shift_entry()
+          ->get_value( $self->{args}->{ldapAttributeContent} );
     };
 
     if ( !defined $session->{serialized} ) {
@@ -96,9 +122,14 @@ sub remove {
     my $self    = shift;
     my $session = shift;
     $self->{args} = $session->{args};
+    $self->{args}->{ldapObjectClass}      ||= 'applicationProcess';
+    $self->{args}->{ldapAttributeId}      ||= 'cn';
+    $self->{args}->{ldapAttributeContent} ||= 'description';
+    $self->{args}->{ldapAttributeIndex}   ||= 'ou';
 
-    $self->ldap->delete(
-        "cn=$session->{data}->{_session_id}," . $self->{args}->{ldapConfBase} );
+    $self->ldap->delete( $self->{args}->{ldapAttributeId} . "="
+          . $session->{data}->{_session_id} . ","
+          . $self->{args}->{ldapConfBase} );
 
     $self->ldap->unbind() && delete $self->{ldap};
 }
@@ -192,15 +223,21 @@ objects are stored in an LDAP directory file using the Net::LDAP Perl module.
 
 This module requires one argument in the usual Apache::Session style. The
 keys ldapServer, ldapBase, ldapBindDN, ldapBindPassword are required. The key
-ldapPort is optional. Example:
+ldapPort, ldapObjectClass, ldapAttributeId, ldapAttributeContent, ldapAttributeIndex
+are optional.
+Example:
 
  tie %s, 'Apache::Session::Browseable::LDAP', undef,
     {
-        ldapServer       => 'localhost',
-        ldapBase         => 'dc=example,dc=com',
-        ldapBindDN       => 'cn=admin,dc=example,dc=com',
-        ldapBindPassword => 'pass',
-        Index            => 'uid ipAddr',
+        ldapServer           => 'localhost',
+        ldapBase             => 'dc=example,dc=com',
+        ldapBindDN           => 'cn=admin,dc=example,dc=com',
+        ldapBindPassword     => 'pass',
+        Index                => 'uid ipAddr',
+        ldapObjectClass      => 'applicationProcess',
+        ldapAttributeId      => 'cn',
+        ldapAttributeContent => 'description',
+        ldapAttributeIndex   => 'ou',
     };
 
 =head1 AUTHOR
