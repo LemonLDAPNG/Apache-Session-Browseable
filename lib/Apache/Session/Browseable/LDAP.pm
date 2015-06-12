@@ -77,7 +77,7 @@ sub _query {
         attrs => [ 'description', 'cn' ],
     );
 
-    $ldap->unbind() && delete $ldap;
+    $ldap->unbind();
 
     if ( $msg->code ) {
         Apache::Session::Browseable::Store::LDAP->logError($msg);
