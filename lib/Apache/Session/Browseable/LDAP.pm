@@ -117,7 +117,7 @@ sub get_key_from_all_sessions {
         attrs  => [ 'cn', 'description' ],
     );
 
-    $ldap->unbind() && delete $ldap;
+    $ldap->unbind();
 
     if ( $msg->code ) {
         Apache::Session::Browseable::Store::LDAP->logError($msg);
