@@ -5,7 +5,7 @@ use strict;
 use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::MySQL;
-use Apache::Session::Generate::MD5;
+use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::Storable;
 use Apache::Session::Browseable::DBI;
 
@@ -17,8 +17,8 @@ sub populate {
 
     $self->{object_store} = new Apache::Session::Browseable::Store::MySQL $self;
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
-    $self->{generate}     = \&Apache::Session::Generate::MD5::generate;
-    $self->{validate}     = \&Apache::Session::Generate::MD5::validate;
+    $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
+    $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
     $self->{serialize}    = \&Apache::Session::Serialize::Storable::serialize;
     $self->{unserialize}  = \&Apache::Session::Serialize::Storable::unserialize;
 

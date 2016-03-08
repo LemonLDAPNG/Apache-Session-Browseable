@@ -16,7 +16,7 @@ use strict;
 use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::SQLite;
-use Apache::Session::Generate::MD5;
+use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::Base64;
 use Apache::Session::Browseable::DBI;
 
@@ -29,8 +29,8 @@ sub populate {
     $self->{object_store} =
       new Apache::Session::Browseable::Store::SQLite $self;
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
-    $self->{generate}     = \&Apache::Session::Generate::MD5::generate;
-    $self->{validate}     = \&Apache::Session::Generate::MD5::validate;
+    $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
+    $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
     $self->{serialize}    = \&Apache::Session::Serialize::Base64::serialize;
     $self->{unserialize}  = \&Apache::Session::Serialize::Base64::unserialize;
 

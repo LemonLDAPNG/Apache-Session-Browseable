@@ -47,3 +47,6 @@ Revision history for Perl extension Apache::Session::Browseable.
 1.0.2  Thu Oct 17 20:27:24 2013
     - _common::_tabInTab() must return 0 if no fields are required
       Closes http://jira.ow2.org/browse/LEMONLDAP-627
+
+1.1  Tue Mar 08 22:08:09 2016
+    - replace MD5 by SHA256
