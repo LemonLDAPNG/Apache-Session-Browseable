@@ -6,11 +6,10 @@ use Apache::Session;
 use Apache::Session::Lock::File;
 use Apache::Session::Browseable::Store::File;
 use Apache::Session::Generate::SHA256;
-use Apache::Session::Serialize::Storable;
+use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::_common;
-use Storable qw(thaw);
 
-our $VERSION = '1.0';
+our $VERSION = '1.2';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
@@ -20,8 +19,8 @@ sub populate {
     $self->{lock_manager} = new Apache::Session::Lock::File $self;
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
     $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
-    $self->{serialize}    = \&Apache::Session::Serialize::Storable::serialize;
-    $self->{unserialize}  = \&Apache::Session::Serialize::Storable::unserialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serialize;
+    $self->{unserialize}  = \&Apache::Session::Serialize::JSON::unserialize;
 
     return $self;
 }
@@ -35,9 +34,7 @@ sub DESTROY {
 }
 
 sub get_key_from_all_sessions {
-    my $class = shift;
-    my $args  = shift;
-    my $data  = shift;
+    my ( $class, $args, $data ) = @_;
     $args->{Directory} ||= $Apache::Session::Store::File::Directory;
 
     unless ( opendir DIR, $args->{Directory} ) {
@@ -51,15 +48,15 @@ sub get_key_from_all_sessions {
         open F, "$args->{Directory}/$f";
         my $row = join '', <F>;
         if ( ref($data) eq 'CODE' ) {
-            $res{$f} = &$data( thaw($row), $f );
+            $res{$f} = &$data( &Apache::Session::Serialize::JSON::unserialize($row), $f );
         }
         elsif ($data) {
             $data = [$data] unless ( ref($data) );
-            my $tmp = thaw($row);
+            my $tmp = &Apache::Session::Serialize::JSON::unserialize($row);
             $res{$f}->{$_} = $tmp->{$_} foreach (@$data);
         }
         else {
-            $res{$f} = thaw($row);
+            $res{$f} = &Apache::Session::Serialize::JSON::unserialize($row);
         }
     }
     return \%res;
