@@ -48,15 +48,15 @@ sub get_key_from_all_sessions {
         open F, "$args->{Directory}/$f";
         my $row = join '', <F>;
         if ( ref($data) eq 'CODE' ) {
-            $res{$f} = &$data( &Apache::Session::Serialize::JSON::unserialize($row), $f );
+            $res{$f} = &$data( &Apache::Session::Serialize::JSON::_unserialize($row), $f );
         }
         elsif ($data) {
             $data = [$data] unless ( ref($data) );
-            my $tmp = &Apache::Session::Serialize::JSON::unserialize($row);
+            my $tmp = &Apache::Session::Serialize::JSON::_unserialize($row);
             $res{$f}->{$_} = $tmp->{$_} foreach (@$data);
         }
         else {
-            $res{$f} = &Apache::Session::Serialize::JSON::unserialize($row);
+            $res{$f} = &Apache::Session::Serialize::JSON::_unserialize($row);
         }
     }
     return \%res;
