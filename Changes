@@ -48,6 +48,6 @@ Revision history for Perl extension Apache::Session::Browseable.
     - _common::_tabInTab() must return 0 if no fields are required
       Closes http://jira.ow2.org/browse/LEMONLDAP-627
 
-1.1  Tue Mar 08 22:08:09 2016
+1.2  Tue Mar 08 22:08:09 2016
     - replace MD5 by SHA256
     - replace serialization by JSON
