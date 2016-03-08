@@ -5,7 +5,7 @@ use strict;
 use vars qw($VERSION);
 use Digest::SHA qw(sha256 sha256_hex sha256_base64);
 
-$VERSION = '1.4.0';
+$VERSION = '1.2';
 
 sub generate {
     my $session = shift;

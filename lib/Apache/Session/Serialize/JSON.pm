@@ -4,7 +4,7 @@ package Apache::Session::Serialize::JSON;
 use strict;
 use JSON;
 
-our $VERSION = '1.9.1';
+our $VERSION = '1.2';
 
 sub serialize {
     my $session = shift;
