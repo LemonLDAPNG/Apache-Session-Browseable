@@ -7,7 +7,7 @@ use Apache::Session::Store::Postgres;
 
 our @ISA =
   qw(Apache::Session::Browseable::Store::DBI Apache::Session::Store::Postgres);
-our $VERSION = '0.1';
+our $VERSION = '1.2';
 
 1;
 

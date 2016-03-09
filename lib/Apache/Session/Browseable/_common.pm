@@ -3,7 +3,7 @@ package Apache::Session::Browseable::_common;
 use strict;
 use AutoLoader 'AUTOLOAD';
 
-our $VERSION = '1.0';
+our $VERSION = '1.2';
 
 sub _tabInTab {
     my ( $class, $t1, $t2 ) = @_;

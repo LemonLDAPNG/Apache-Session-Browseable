@@ -9,7 +9,7 @@ use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::Sybase;
 use Apache::Session::Browseable::DBI;
 
-our $VERSION = '0.8';
+our $VERSION = '1.2';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
 *serialize   = \&Apache::Session::Serialize::Sybase::serialize;

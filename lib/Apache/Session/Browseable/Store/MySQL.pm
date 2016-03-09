@@ -7,7 +7,7 @@ use Apache::Session::Store::MySQL;
 
 our @ISA =
   qw(Apache::Session::Browseable::Store::DBI Apache::Session::Store::MySQL);
-our $VERSION = '0.1';
+our $VERSION = '1.2';
 
 1;
 

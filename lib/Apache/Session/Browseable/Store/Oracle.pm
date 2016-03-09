@@ -7,7 +7,7 @@ use Apache::Session::Store::Oracle;
 
 our @ISA =
   qw(Apache::Session::Browseable::Store::DBI Apache::Session::Store::Oracle);
-our $VERSION = '0.1';
+our $VERSION = '1.2';
 
 1;
 

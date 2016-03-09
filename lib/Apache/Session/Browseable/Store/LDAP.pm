@@ -3,7 +3,7 @@ package Apache::Session::Browseable::Store::LDAP;
 use strict;
 use Net::LDAP;
 
-our $VERSION = '1.1';
+our $VERSION = '1.2';
 
 sub new {
     my $class = shift;

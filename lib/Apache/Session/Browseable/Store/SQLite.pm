@@ -18,7 +18,7 @@ use Apache::Session::Store::DBI;
 use Apache::Session::Browseable::Store::DBI;
 
 our @ISA     = qw(Apache::Session::Browseable::Store::DBI Apache::Session::Store::DBI);
-our $VERSION = '1.0';
+our $VERSION = '1.2';
 
 $Apache::Session::Browseable::Store::SQLite::DataSource = undef;
 
@@ -129,7 +129,7 @@ called 'sessions', or another name if you supply the TableName parameter.
  id char(32)     # or however long your session IDs are.
  a_session text  # This has an ~8 KB limit :(
 
-To create this schema, you can execute this command using the psql program:
+To create this schema, you can execute this command using the sqlite program:
 
  CREATE TABLE sessions (
     id char(32) not null primary key,

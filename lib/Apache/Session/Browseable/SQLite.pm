@@ -17,10 +17,10 @@ use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::SQLite;
 use Apache::Session::Generate::SHA256;
-use Apache::Session::Serialize::Base64;
+use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::DBI;
 
-our $VERSION = '1.0';
+our $VERSION = '1.2';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
 sub populate {
@@ -31,8 +31,8 @@ sub populate {
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
     $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
-    $self->{serialize}    = \&Apache::Session::Serialize::Base64::serialize;
-    $self->{unserialize}  = \&Apache::Session::Serialize::Base64::unserialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serialize;
+    $self->{unserialize}  = \&Apache::Session::Serialize::JSON::unserialize;
 
     return $self;
 }
