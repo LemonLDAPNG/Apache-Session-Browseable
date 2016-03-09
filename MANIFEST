@@ -37,4 +37,5 @@ t/Apache-Session-Browseable-Redis.t
 t/Apache-Session-Browseable-SQLite.t
 t/Apache-Session-Browseable-Store-DBI.t
 t/Apache-Session-Browseable-Store-MySQL.t
+t/test-browseable-functions-using-File.t
 t/test-browseable-functions-using-SQLite.t
