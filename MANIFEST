@@ -1,6 +1,6 @@
 Build.PL
 Changes
-lib/Apache/Session/Browseable.pod
+lib/Apache/Session/Browseable.pm
 lib/Apache/Session/Browseable/_common.pm
 lib/Apache/Session/Browseable/DBI.pm
 lib/Apache/Session/Browseable/File.pm

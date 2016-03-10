@@ -1,3 +1,12 @@
+package Apache::Session::Browseable;
+
+our $VERSION = '1.2.1';
+
+print STDERR "Use a sub module of Apache::Session::Browseable such as Apache::Session::Browseable::File";
+
+1;
+__END__
+
 =head1 NAME
 
 Apache::Session::Browseable - Add index and search methods to Apache::Session
