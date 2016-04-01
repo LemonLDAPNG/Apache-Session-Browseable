@@ -18,7 +18,7 @@ use Apache::Session::Store::DBI;
 use Apache::Session::Browseable::Store::DBI;
 
 our @ISA     = qw(Apache::Session::Browseable::Store::DBI Apache::Session::Store::DBI);
-our $VERSION = '1.2';
+our $VERSION = '1.2.2';
 
 $Apache::Session::Browseable::Store::SQLite::DataSource = undef;
 

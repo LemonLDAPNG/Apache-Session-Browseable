@@ -3,7 +3,7 @@ package Apache::Session::Browseable::Store::Redis;
 use strict;
 use Redis;
 
-our $VERSION = '1.2';
+our $VERSION = '1.2.2';
 
 sub new {
     my ( $class, $session ) = @_;

@@ -54,3 +54,6 @@ Revision history for Perl extension Apache::Session::Browseable.
 
 1.2.1  Thu Mar 10 07:27:45 2016
     - Add an empty Browseable.pm due to new Pause restrictions
+
+1.2.2  Fri Apr 1 13:22:22 2016
+    - Manage old session format for databases

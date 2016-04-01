@@ -9,7 +9,7 @@ use Apache::Session::Lock::Null;
 use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::_common;
 
-our $VERSION = '1.2';
+our $VERSION = '1.2.2';
 our @ISA     = qw(Apache::Session);
 
 sub populate {

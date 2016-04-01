@@ -7,7 +7,7 @@ use Apache::Session::Store::Informix;
 
 our @ISA =
   qw(Apache::Session::Browseable::Store::DBI Apache::Session::Store::Informix);
-our $VERSION = '1.2';
+our $VERSION = '1.2.2';
 
 1;
 
