@@ -6,7 +6,7 @@ use DBI;
 use Apache::Session;
 use Apache::Session::Browseable::_common;
 
-our $VERSION = '1.2';
+our $VERSION = '1.2.2';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub searchOn {
@@ -120,11 +120,24 @@ sub get_key_from_all_sessions {
     my $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
     $sth->execute;
     my %res;
+    my $next = (
+        $args->{DataSource} !~ /^sybase/i
+        ? sub {
+            require Storable;
+            return Storable::thaw( pack( 'H*', $_[0] ) );
+          }
+        : $args->{DataSource} !~ /^mysql/i ? sub {
+            require MIME::Base64;
+            require Storable;
+            return Storable::thaw( MIME::Base64::decode_base64( $_[0] ) );
+          }
+        : undef
+    );
     while ( my @row = $sth->fetchrow_array ) {
         no strict 'refs';
         my $self = eval "&${class}::populate();";
         my $sub = $self->{unserialize};
-        my $tmp = &$sub( { serialized => $row[1] } );
+        my $tmp  = &$sub( { serialized => $row[1] }, $next );
         if ( ref($data) eq 'CODE' ) {
             $tmp = &$data( $tmp, $row[0] );
             $res{ $row[0] } = $tmp if ( defined($tmp) );

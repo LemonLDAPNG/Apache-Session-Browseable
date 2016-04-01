@@ -4,7 +4,7 @@ package Apache::Session::Serialize::JSON;
 use strict;
 use JSON;
 
-our $VERSION = '1.2';
+our $VERSION = '1.2.2';
 
 sub serialize {
     my $session = shift;
@@ -13,9 +13,9 @@ sub serialize {
 }
 
 sub unserialize {
-    my $session = shift;
+    my ($session,$next) = @_;
 
-    my $data = _unserialize( $session->{serialized} );
+    my $data = _unserialize( $session->{serialized}, $next );
     die "Session could not be unserialized" unless defined $data;
     $session->{data} = $data;
 }
