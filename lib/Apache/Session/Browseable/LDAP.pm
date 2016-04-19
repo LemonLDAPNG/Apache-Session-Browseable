@@ -84,6 +84,7 @@ sub _query {
     );
 
     $ldap->unbind();
+    $ldap->disconnect();
 
     if ( $msg->code ) {
         Apache::Session::Browseable::Store::LDAP->logError($msg);
