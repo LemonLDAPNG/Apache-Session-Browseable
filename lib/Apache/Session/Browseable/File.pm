@@ -9,7 +9,9 @@ use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::_common;
 
-our $VERSION = '1.2.2';
+use constant SL => ( $^O and $^O =~ /(?:MSWin|Windows)/i ? '\\' : '/' );
+
+our $VERSION = '1.2.3';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
@@ -41,14 +43,17 @@ sub get_key_from_all_sessions {
         die "Cannot open directory $args->{Directory}\n";
     }
     my @t =
-      grep { -f "$args->{Directory}/$_" and /^[A-Za-z0-9@\-]+$/ } readdir(DIR);
+      grep { -f $args->{Directory} . SL . $_ and /^[A-Za-z0-9@\-]+$/ }
+      readdir(DIR);
     closedir DIR;
     my %res;
     for my $f (@t) {
-        open F, "$args->{Directory}/$f";
+        open F, $args->{Directory} . SL . $f;
         my $row = join '', <F>;
         if ( ref($data) eq 'CODE' ) {
-            $res{$f} = &$data( &Apache::Session::Serialize::JSON::_unserialize($row), $f );
+            $res{$f} =
+              &$data( &Apache::Session::Serialize::JSON::_unserialize($row),
+                $f );
         }
         elsif ($data) {
             $data = [$data] unless ( ref($data) );

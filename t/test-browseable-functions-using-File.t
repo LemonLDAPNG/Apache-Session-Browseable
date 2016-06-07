@@ -4,10 +4,13 @@ use strict;
 use warnings;
 use Test::More;
 
+use constant SESSIONPATH => 't'
+  . ( $^O and $^O =~ /(?:MSWin|Windows)/i ? '\\' : '/' )
+  . 'sessions';
 eval {
     require File::Path;
-    File::Path::remove_tree('t/sessions');
-    File::Path::mkpath('t/sessions');
+    File::Path::remove_tree(SESSIONPATH);
+    File::Path::mkpath(SESSIONPATH);
 };
 plan skip_all => "Unable to use file system ($@)" if ($@);
 
@@ -19,7 +22,7 @@ plan tests => 27 + 5 * $count;
 use_ok('Apache::Session::Browseable::File');
 
 my %session;
-my $args = { Directory => "t/sessions", Index => "f1 f2", };
+my $args = { Directory => SESSIONPATH, Index => "f1 f2", };
 foreach (@list) {
     ok( tie %session, 'Apache::Session::Browseable::File',
         undef, $args, "Create session $_" );
@@ -108,7 +111,7 @@ ok(
     )
 );
 
-eval { File::Path::remove_tree('t/sessions') };
+eval { File::Path::remove_tree(SESSIONPATH) };
 
 while ( my ( $id, $entry ) = each %$res ) {
     ok( $entry->{f1} =~ /^1_(\w{2})$/ );
