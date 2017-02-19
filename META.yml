@@ -8,7 +8,7 @@ build_requires:
 configure_requires:
   Module::Build: '0'
 dynamic_config: 1
-generated_by: 'Module::Build version 0.4218, CPAN::Meta::Converter version 2.150005'
+generated_by: 'Module::Build version 0.422, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -17,7 +17,7 @@ name: Apache-Session-Browseable
 provides:
   Apache::Session::Browseable:
     file: lib/Apache/Session/Browseable.pm
-    version: v1.2.3
+    version: v1.2.4
   Apache::Session::Browseable::DBI:
     file: lib/Apache/Session/Browseable/DBI.pm
     version: v1.2.2
@@ -92,5 +92,5 @@ requires:
   JSON: '0'
 resources:
   license: http://dev.perl.org/licenses/
-version: v1.2.3
-x_serialization_backend: 'CPAN::Meta::YAML version 0.012'
+version: v1.2.4
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

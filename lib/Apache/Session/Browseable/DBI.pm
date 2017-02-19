@@ -121,12 +121,12 @@ sub get_key_from_all_sessions {
     $sth->execute;
     my %res;
     my $next = (
-        $args->{DataSource} !~ /^sybase/i
+        $args->{DataSource} =~ /^sybase/i
         ? sub {
             require Storable;
             return Storable::thaw( pack( 'H*', $_[0] ) );
           }
-        : $args->{DataSource} !~ /^mysql/i ? sub {
+        : $args->{DataSource} =~ /^mysql/i ? sub {
             require MIME::Base64;
             require Storable;
             return Storable::thaw( MIME::Base64::decode_base64( $_[0] ) );

@@ -1,3 +1,4 @@
+.travis.yml
 Build.PL
 Changes
 lib/Apache/Session/Browseable.pm
@@ -24,11 +25,12 @@ lib/Apache/Session/Browseable/Store/Sybase.pm
 lib/Apache/Session/Browseable/Sybase.pm
 lib/Apache/Session/Generate/SHA256.pm
 lib/Apache/Session/Serialize/JSON.pm
+COPYRIGHT
 LICENSE
 MANIFEST
 META.json
 META.yml			Module meta-data (added by MakeMaker)
-README
+README.md
 t/Apache-Session-Browseable-common.t
 t/Apache-Session-Browseable-DBI.t
 t/Apache-Session-Browseable-File.t

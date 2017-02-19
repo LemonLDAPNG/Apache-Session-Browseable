@@ -4,7 +4,7 @@
       "Xavier Guimard, E<lt>x.guimard@free.frE<gt>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4218",
+   "generated_by" : "Module::Build version 0.422",
    "license" : [
       "perl_5"
    ],
@@ -39,7 +39,7 @@
    "provides" : {
       "Apache::Session::Browseable" : {
          "file" : "lib/Apache/Session/Browseable.pm",
-         "version" : "v1.2.3"
+         "version" : "v1.2.4"
       },
       "Apache::Session::Browseable::DBI" : {
          "file" : "lib/Apache/Session/Browseable/DBI.pm",
@@ -136,6 +136,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "v1.2.3",
-   "x_serialization_backend" : "JSON::PP version 2.27300"
+   "version" : "v1.2.4",
+   "x_serialization_backend" : "JSON::PP version 2.27300_01"
 }
