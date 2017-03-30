@@ -1,6 +1,6 @@
 package Apache::Session::Browseable;
 
-our $VERSION = '1.2.4';
+our $VERSION = '1.2.5';
 
 print STDERR "Use a sub module of Apache::Session::Browseable such as Apache::Session::Browseable::File";
 

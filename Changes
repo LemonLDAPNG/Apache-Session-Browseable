@@ -63,3 +63,6 @@ Revision history for Perl extension Apache::Session::Browseable.
 
 1.2.4  Sun Feb 19 08:25:10 2016
     - Incorrect logic for old database formats (fixes: #11)
+
+1.2.5
+    - PostgreSQL "hstore" and "json" support

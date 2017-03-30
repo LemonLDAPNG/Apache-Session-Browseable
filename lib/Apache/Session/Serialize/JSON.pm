@@ -2,7 +2,7 @@
 package Apache::Session::Serialize::JSON;
 
 use strict;
-use JSON;
+use JSON qw(to_json from_json);
 
 our $VERSION = '1.2.2';
 
