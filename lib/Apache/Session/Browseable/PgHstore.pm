@@ -60,7 +60,17 @@ sub _query {
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
     $sth->execute( @{ $query->{values} } );
-    return $sth->fetchall_hashref('id');
+
+    # In this case, PostgreSQL change field name in lowercase
+    my $res = $sth->fetchall_hashref('id') or return {};
+    foreach (@fields) {
+        if ( $_ ne lc($_) ) {
+            foreach my $s ( keys %$res ) {
+                $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ };
+            }
+        }
+    }
+    return $res;
 }
 
 sub get_key_from_all_sessions {
