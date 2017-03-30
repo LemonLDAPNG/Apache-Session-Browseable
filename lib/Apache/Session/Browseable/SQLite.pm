@@ -2,7 +2,7 @@
 #
 # Apache::Session::Browseable::SQLite
 # Apache persistent user sessions in a SQLite database
-# Copyright(c) 2013 Xavier Guimard <x.guimard@free.fr>
+# Copyright(c) 2013-2017 Xavier Guimard <x.guimard@free.fr>
 # Inspired by Apache::Session::Postgres
 # (copyright(c) 1998, 1999, 2000 Jeffrey William Baker (jwbaker@acm.org))
 # Distribute under the Perl License

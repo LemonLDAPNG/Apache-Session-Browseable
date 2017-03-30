@@ -26,7 +26,6 @@ sub populate {
 }
 
 1;
-
 __END__
 
 =head1 NAME
@@ -104,8 +103,8 @@ Xavier Guimard, E<lt>x.guimard@free.frE<gt>
 
 =encoding utf8
 
-Copyright (C) 2009-2013 by Xavier Guimard
-              2013 by Clément Oudot
+Copyright (C) 2009-2017 by Xavier Guimard
+              2013-2017 by Clément Oudot
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.1 or,

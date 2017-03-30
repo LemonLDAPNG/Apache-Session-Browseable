@@ -196,8 +196,8 @@ Xavier Guimard, E<lt>x.guimard@free.frE<gt>
 
 =encoding utf8
 
-Copyright (C) 2009 by Xavier Guimard
-Copyright (C) 2013, 2015 by Clement Oudot
+Copyright (C) 2009-2017 by Xavier Guimard
+Copyright (C) 2013-2017 by Clement Oudot
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.10.0 or,

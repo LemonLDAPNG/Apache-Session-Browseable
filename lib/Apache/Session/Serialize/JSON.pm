@@ -83,9 +83,9 @@ L<http://jira.ow2.org>
 
 =over
 
-=item Copyright (C) 2015-2016 by Clément Oudot, E<lt>clem.oudot@gmail.comE<gt>
+=item Copyright (C) 2015-2017 by Clément Oudot, E<lt>clem.oudot@gmail.comE<gt>
 
-=item Copyright (C) 2015-2016 by Xavier Guimard, E<lt>x.guimard@free.frE<gt>
+=item Copyright (C) 2015-2017 by Xavier Guimard, E<lt>x.guimard@free.frE<gt>
 
 =back
 

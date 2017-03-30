@@ -125,3 +125,54 @@ sub _classDbh {
 }
 
 1;
+__END__
+
+=head1 NAME
+
+Apache::Session::Browseable::PgHstore - Hstore type support for
+L<Apache::Session::Browseable::Postgres>
+
+=head1 SYNOPSIS
+
+Enable "hstore" extension in PostgreSQL database
+
+  CREATE EXTENSION hstore;
+
+Create table:
+
+  CREATE TABLE sessions (
+      id varchar(64) not null primary key,
+      a_session hstore,
+  );
+
+Use it like L<Apache::Session::Browseable::Postgres> except that you don't
+need to declare indexes
+
+=head1 DESCRIPTION
+
+Apache::Session::Browseable provides some class methods to manipulate all
+sessions and add the capability to index some fields to make research faster.
+
+Apache::Session::Browseable::PgHstore implements it for PosqtgreSQL databases
+using "hstore" extension to be able to browse sessions.
+
+=head1 SEE ALSO
+
+L<http://lemonldap-ng.org>, L<Apache::Session::Postgres>
+
+=head1 AUTHOR
+
+Xavier Guimard, E<lt>x.guimard@free.frE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+=encoding utf8
+
+Copyright (C) 2009-2017 by Xavier Guimard
+              2013-2017 by Clément Oudot
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.10.1 or,
+at your option, any later version of Perl 5 you may have available.
+
+=cut
