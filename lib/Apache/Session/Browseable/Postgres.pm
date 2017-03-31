@@ -38,7 +38,7 @@ L<Apache::Session::Postgres>
 
 Create table:
 
-  CREATE TABLE sessions (
+  CREATE UNLOGGED TABLE sessions (
       id varchar(64) not null primary key,
       a_session text,
       uid text,

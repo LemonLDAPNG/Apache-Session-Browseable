@@ -140,7 +140,7 @@ Enable "hstore" extension in PostgreSQL database
 
 Create table:
 
-  CREATE TABLE sessions (
+  CREATE UNLOGGED TABLE sessions (
       id varchar(64) not null primary key,
       a_session hstore,
   );
