@@ -158,13 +158,9 @@ L<Apache::Session::Browseable::Postgres>
 
 =head1 SYNOPSIS
 
-Enable "hstore" extension in PostgreSQL database
-
-  CREATE EXTENSION hstore;
-
 Create table:
 
-  CREATE TABLE sessions (
+  CREATE UNLOGGED TABLE sessions (
       id varchar(64) not null primary key,
       a_session json,
   );
