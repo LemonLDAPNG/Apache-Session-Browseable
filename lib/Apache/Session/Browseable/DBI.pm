@@ -29,7 +29,7 @@ sub searchOnExpr {
     my ( $args, $selectField, $value, @fields ) = @_;
 
     # Escape quotes
-    $value       =~ s/'/''/g;
+    $value =~ s/'/''/g;
     $selectField =~ s/'/''/g;
     if ( $class->_fieldIsIndexed( $args, $selectField ) ) {
         $value =~ s/\*/%/g;
@@ -73,8 +73,8 @@ sub _query {
         while ( my @row = $sth->fetchrow_array ) {
             no strict 'refs';
             my $self = eval "&${class}::populate();";
-            my $sub = $self->{unserialize};
-            my $tmp = &$sub( { serialized => $row[1] } );
+            my $sub  = $self->{unserialize};
+            my $tmp  = &$sub( { serialized => $row[1] } );
             if (@fields) {
                 $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@fields);
             }
@@ -84,6 +84,38 @@ sub _query {
         }
     }
     return \%res;
+}
+
+sub deleteIfLowerThan {
+    my ( $class, $args, $rule ) = @_;
+    my ( $query, %fields );
+    my $index =
+      ref( $args->{Index} )
+      ? $args->{Index}
+      : [ split /\s+/, $args->{Index} ];
+    if ( $rule->{or} ) {
+        $query = join ' OR ',
+          map { $fields{$_}++; "cast($_ as integer) < $rule->{or}->{$_}" }
+          keys %{ $rule->{or} };
+    }
+    elsif ( $rule->{and} ) {
+        $query = join ' AND ',
+          map { $fields{$_}++; "cast($_ as integer) < $rule->{or}->{$_}" }
+          keys %{ $rule->{or} };
+    }
+    if ( $rule->{not} ) {
+        $query = "($query) AND "
+          . join( ' AND ',
+            map { $fields{$_}++; "$_ <> '$rule->{not}->{$_}'" }
+              keys %{ $rule->{not} } );
+    }
+    return 0
+      unless ( $query and $class->_tabInTab( [ keys %fields ], $index ) );
+    my $dbh        = $class->_classDbh($args);
+    my $table_name = $args->{TableName}
+      || $Apache::Session::Store::DBI::TableName;
+    my $sth = $dbh->do("DELETE FROM $table_name WHERE $query");
+    return 1;
 }
 
 sub get_key_from_all_sessions {
@@ -135,7 +167,7 @@ sub get_key_from_all_sessions {
     while ( my @row = $sth->fetchrow_array ) {
         no strict 'refs';
         my $self = eval "&${class}::populate();";
-        my $sub = $self->{unserialize};
+        my $sub  = $self->{unserialize};
         my $tmp  = &$sub( { serialized => $row[1] }, $next );
         if ( ref($data) eq 'CODE' ) {
             $tmp = &$data( $tmp, $row[0] );

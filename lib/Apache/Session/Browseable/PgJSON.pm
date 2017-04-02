@@ -73,6 +73,30 @@ sub _query {
     return $res;
 }
 
+sub deleteIfLowerThan {
+    my ( $class, $args, $rule ) = @_;
+    my $query;
+    if ( $rule->{or} ) {
+        $query = join ' OR ',
+          map { "cast(a_session ->> '$_' as integer) < $rule->{or}->{$_}" } keys %{ $rule->{or} };
+    }
+    elsif ( $rule->{and} ) {
+        $query = join ' AND ',
+          map { "cast(a_session ->> '$_' as integer) < $rule->{or}->{$_}" } keys %{ $rule->{or} };
+    }
+    if ( $rule->{not} ) {
+        $query = "($query) AND "
+          . join( ' AND ',
+            map { "a_session ->> '$_' <> '$rule->{not}->{$_}'" } keys %{ $rule->{not} } );
+    }
+    return 0 unless ($query);
+    my $dbh        = $class->_classDbh($args);
+    my $table_name = $args->{TableName}
+      || $Apache::Session::Store::DBI::TableName;
+    my $sth = $dbh->do("DELETE FROM $table_name WHERE $query");
+    return 1;
+}
+
 sub get_key_from_all_sessions {
     my ( $class, $args, $data ) = @_;
 
