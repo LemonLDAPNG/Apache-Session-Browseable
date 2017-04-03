@@ -35,6 +35,26 @@ Apache::Session::MySQL
 
 =head1 SYNOPSIS
 
+Create table with columns for indexed fields. Example for Lemonldap::NG:
+
+  CREATE TABLE sessions (
+      id varchar(64) not null primary key,
+      a_session text,
+      _whatToTrace text,
+      _session_kind text,
+      _utime bigint,
+      ipAddr text
+  );
+
+Add indexes:
+
+  CREATE INDEX uid1 ON sessions (_whatToTrace);
+  CREATE INDEX s1   ON sessions (_session_kind);
+  CREATE INDEX u1   ON sessions (_utime);
+  CREATE INDEX ip1  ON sessions (ipAddr);
+
+Use it with Perl:
+
   use Apache::Session::Browseable::MySQL;
 
   my $args = {

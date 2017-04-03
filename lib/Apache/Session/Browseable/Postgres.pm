@@ -36,14 +36,23 @@ L<Apache::Session::Postgres>
 
 =head1 SYNOPSIS
 
-Create table:
+Create table with columns for indexed fields. Example for Lemonldap::NG:
 
   CREATE UNLOGGED TABLE sessions (
       id varchar(64) not null primary key,
       a_session text,
-      uid text,
-      mail text
+      _whatToTrace text,
+      _session_kind text,
+      _utime bigint,
+      ipAddr text
   );
+
+Add indexes:
+
+  CREATE INDEX uid1 ON sessions (_whatToTrace);
+  CREATE INDEX s1   ON sessions (_session_kind);
+  CREATE INDEX u1   ON sessions (_utime);
+  CREATE INDEX ip1  ON sessions (ipAddr);
 
 Use it with Perl:
 
@@ -56,7 +65,7 @@ Use it with Perl:
        Commit     => 1,
 
        # Choose your browseable fileds
-       Index          => 'uid mail',
+       Index      => '_whatToTrace _session_kind _utime iAddr',
   };
   
   # Use it like Apache::Session
