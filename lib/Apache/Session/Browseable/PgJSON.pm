@@ -167,10 +167,10 @@ Create table:
 
 Optionaly, add indexes on some fields. Example for Lemonldap::NG:
 
-  CREATE INDEX uid1 ON sessions ( (a_session ->> '_whatToTrace') );
+  CREATE INDEX uid1 ON sessions USING BTREE ( (a_session ->> '_whatToTrace') );
   CREATE INDEX  s1  ON sessions ( (a_session ->> '_session_kind') );
-  CREATE INDEX  u1  ON sessions ( ( cast(a_session ->> '_utime' AS int) ) );
-  CREATE INDEX ip1  ON sessions ( (a_session ->> 'ipAddr') );
+  CREATE INDEX  u1  ON sessions ( ( cast(a_session ->> '_utime' AS bigint) ) );
+  CREATE INDEX ip1  ON sessions USING BTREE ( (a_session ->> 'ipAddr') );
 
 Use it like L<Apache::Session::Browseable::Postgres> except that you don't
 need to declare indexes
