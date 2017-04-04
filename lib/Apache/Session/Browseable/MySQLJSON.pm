@@ -1,26 +1,26 @@
-package Apache::Session::Browseable::PgHstore;
+package Apache::Session::Browseable::MySQLJSON;
 
 use strict;
 
 use Apache::Session;
 use Apache::Session::Lock::Null;
-use Apache::Session::Browseable::Store::Postgres;
+use Apache::Session::Browseable::Store::MySQL;
 use Apache::Session::Generate::SHA256;
-use Apache::Session::Serialize::Hstore;
+use Apache::Session::Serialize::JSON;
+use Apache::Session::Browseable::DBI;
 
 our $VERSION = '1.2.5';
-our @ISA     = qw(Apache::Session);
+our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
 sub populate {
     my $self = shift;
 
-    $self->{object_store} =
-      new Apache::Session::Browseable::Store::Postgres $self;
+    $self->{object_store} = new Apache::Session::Browseable::Store::MySQL $self;
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
     $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
-    $self->{serialize}    = \&Apache::Session::Serialize::Hstore::serialize;
-    $self->{unserialize}  = \&Apache::Session::Serialize::Hstore::unserialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serialize;
+    $self->{unserialize}  = \&Apache::Session::Serialize::JSON::unserialize;
 
     return $self;
 }
@@ -29,7 +29,7 @@ sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
     $selectField =~ s/'/''/g;
     my $query =
-      { query => "a_session -> '$selectField' =?", values => [$value] };
+      { query => qq'a_session->>"\$.$selectField" =?', values => [$value] };
     return $class->_query( $args, $query, @fields );
 }
 
@@ -38,7 +38,7 @@ sub searchOnExpr {
     $selectField =~ s/'/''/g;
     $value =~ s/\*/%/g;
     my $query =
-      { query => "a_session -> '$selectField' like ?", values => [$value] };
+      { query => qq'a_session->>"\$.$selectField" like ?', values => [$value] };
     return $class->_query( $args, $query, @fields );
 }
 
@@ -56,7 +56,7 @@ sub _query {
 
     my $sth;
     my $fields =
-      join( ',', 'id', map { s/'//g; "a_session -> '$_' AS $_" } @fields );
+      join( ',', 'id', map { s/'//g; qq(a_session->>"\$.$_" AS $_) } @fields );
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
     $sth->execute( @{ $query->{values} } );
@@ -78,19 +78,16 @@ sub deleteIfLowerThan {
     my $query;
     if ( $rule->{or} ) {
         $query = join ' OR ',
-          map { "cast(a_session -> '$_' as bigint) < $rule->{or}->{$_}" }
-          keys %{ $rule->{or} };
+          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} } keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ',
-          map { "cast(a_session -> '$_' as bigint) < $rule->{or}->{$_}" }
-          keys %{ $rule->{or} };
+          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} } keys %{ $rule->{or} };
     }
     if ( $rule->{not} ) {
         $query = "($query) AND "
           . join( ' AND ',
-            map { "a_session -> '$_' <> '$rule->{not}->{$_}'" }
-              keys %{ $rule->{not} } );
+            map { qq{a_session->>"\$.$_" <> '$rule->{not}->{$_}'} } keys %{ $rule->{not} } );
     }
     return 0 unless ($query);
     my $dbh        = $class->_classDbh($args);
@@ -111,7 +108,7 @@ sub get_key_from_all_sessions {
     # Special case if all wanted fields are indexed
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
-        my $fields = join ',', map { s/'//g; "a_session -> '$_' AS $_" } @$data;
+        my $fields = join ',', map { s/'//g; qq{a_session->>"\$.$_" AS $_} } @$data;
         $sth = $dbh->prepare("SELECT $fields from $table_name");
         $sth->execute;
         return $sth->fetchall_hashref('id');
@@ -156,43 +153,59 @@ __END__
 
 =head1 NAME
 
-Apache::Session::Browseable::PgHstore - Hstore type support for
-L<Apache::Session::Browseable::Postgres>
+Apache::Session::Browseable::MySQL - Add index and search methods to
+Apache::Session::MySQL
 
 =head1 SYNOPSIS
 
-Enable "hstore" extension in PostgreSQL database
+Create table with columns for indexed fields. Example for Lemonldap::NG with
+optional virtual tables and indexes:
 
-  CREATE EXTENSION hstore;
-
-Create table:
-
-  CREATE UNLOGGED TABLE sessions (
+  CREATE TABLE sessions (
       id varchar(64) not null primary key,
-      a_session hstore,
-  );
+      a_session json,
+      as_wt varchar(32) AS (a_session->"$._whatToTrace") VIRTUAL,
+      as_sk varchar(12) AS (a_session->"$._session_kind") VIRTUAL,
+      as_ut bigint AS (a_session->"$._utime") VIRTUAL,
+      as_ip varchar(40) AS (a_session->"$.ipAddr") VIRTUAL,
+      KEY as_wt (as_wt),
+      KEY as_sk (as_sk),
+      KEY as_ut (as_ut),
+      KEY as_ip (as_ip)
+  ) ENGINE=InnoDB;
 
-Optionaly, add indexes on some fields. Example for Lemonldap::NG:
+Use it with Perl:
 
-  CREATE INDEX uid1 ON sessions USING BTREE ( (a_session -> '_whatToTrace') );
-  CREATE INDEX  s1  ON sessions ( (a_session -> '_session_kind') );
-  CREATE INDEX  u1  ON sessions ( ( cast(a_session -> '_utime' AS bigint) ) );
-  CREATE INDEX ip1  ON sessions USING BTREE ( (a_session -> 'ipAddr') );
+  use Apache::Session::Browseable::MySQLJSON;
 
-Use it like L<Apache::Session::Browseable::Postgres> except that you don't
-need to declare indexes
+  my $args = {
+       DataSource => 'dbi:mysql:sessions',
+       UserName   => $db_user,
+       Password   => $db_pass,
+       LockDataSource => 'dbi:mysql:sessions',
+       LockUserName   => $db_user,
+       LockPassword   => $db_pass,
+
+       # Choose your browseable fileds
+       Index          => 'uid mail',
+  };
+
+Use it like L<Apache::Session::Browseable::MySQL>
 
 =head1 DESCRIPTION
 
-Apache::Session::Browseable provides some class methods to manipulate all
+Apache::Session::browseable provides some class methods to manipulate all
 sessions and add the capability to index some fields to make research faster.
 
-Apache::Session::Browseable::PgHstore implements it for PosqtgreSQL databases
-using "hstore" extension to be able to browse sessions.
+Apache::Session::Browseable::MySQLJSON implements it for MySQL databases
+using "json" type to be able to browse sessions.
+
+THIS MODULE ISN'T USABLE WITH MARIADB FOR NOW.
 
 =head1 SEE ALSO
 
-L<http://lemonldap-ng.org>, L<Apache::Session::Postgres>
+L<Apache::Session>, L<Apache::Session::Browseable::MySQL>,
+L<http://lemonldap-ng.org>
 
 =head1 AUTHOR
 
