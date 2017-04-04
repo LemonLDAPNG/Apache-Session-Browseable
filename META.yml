@@ -17,7 +17,7 @@ name: Apache-Session-Browseable
 provides:
   Apache::Session::Browseable:
     file: lib/Apache/Session/Browseable.pm
-    version: v1.2.4
+    version: v1.2.5
   Apache::Session::Browseable::DBI:
     file: lib/Apache/Session/Browseable/DBI.pm
     version: v1.2.2
@@ -32,13 +32,19 @@ provides:
     version: v1.2.2
   Apache::Session::Browseable::MySQL:
     file: lib/Apache/Session/Browseable/MySQL.pm
-    version: v1.2.2
+    version: v1.2.5
   Apache::Session::Browseable::Oracle:
     file: lib/Apache/Session/Browseable/Oracle.pm
     version: v1.2.2
+  Apache::Session::Browseable::PgHstore:
+    file: lib/Apache/Session/Browseable/PgHstore.pm
+    version: v1.2.5
+  Apache::Session::Browseable::PgJSON:
+    file: lib/Apache/Session/Browseable/PgJSON.pm
+    version: v1.2.5
   Apache::Session::Browseable::Postgres:
     file: lib/Apache/Session/Browseable/Postgres.pm
-    version: v1.2.2
+    version: v1.2.5
   Apache::Session::Browseable::Redis:
     file: lib/Apache/Session/Browseable/Redis.pm
     version: v1.2.2
@@ -81,6 +87,9 @@ provides:
   Apache::Session::Generate::SHA256:
     file: lib/Apache/Session/Generate/SHA256.pm
     version: v1.2.2
+  Apache::Session::Serialize::Hstore:
+    file: lib/Apache/Session/Serialize/Hstore.pm
+    version: v1.2.5
   Apache::Session::Serialize::JSON:
     file: lib/Apache/Session/Serialize/JSON.pm
     version: v1.2.2
@@ -92,5 +101,5 @@ requires:
   JSON: '0'
 resources:
   license: http://dev.perl.org/licenses/
-version: v1.2.4
+version: v1.2.5
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

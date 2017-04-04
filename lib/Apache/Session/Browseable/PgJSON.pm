@@ -8,7 +8,7 @@ use Apache::Session::Browseable::Store::Postgres;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 
-our $VERSION = '1.2.2';
+our $VERSION = '1.2.5';
 our @ISA     = qw(Apache::Session);
 
 sub populate {
