@@ -172,7 +172,7 @@ Create table:
       a_session hstore,
   );
 
-Optionaly, add indexes on some fields. Example for Lemonldap::NG:
+Optionally, add indexes on some fields. Example for Lemonldap::NG:
 
   CREATE INDEX uid1 ON sessions USING BTREE ( (a_session -> '_whatToTrace') );
   CREATE INDEX  s1  ON sessions ( (a_session -> '_session_kind') );
