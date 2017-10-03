@@ -8,7 +8,7 @@ use Apache::Session::Browseable::Store::Postgres;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::Hstore;
 
-our $VERSION = '1.2.5';
+our $VERSION = '1.2.7';
 our @ISA     = qw(Apache::Session);
 
 sub populate {
@@ -149,6 +149,8 @@ sub _classDbh {
       DBI->connect_cached( $datasource, $username, $password,
         { RaiseError => 1, AutoCommit => 1 } )
       || die $DBI::errstr;
+    $dbh->{pg_enable_utf8} = 1;
+    return $dbh;
 }
 
 1;
