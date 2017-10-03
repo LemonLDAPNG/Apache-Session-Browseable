@@ -39,7 +39,7 @@
    "provides" : {
       "Apache::Session::Browseable" : {
          "file" : "lib/Apache/Session/Browseable.pm",
-         "version" : "v1.2.7"
+         "version" : "v1.2.8"
       },
       "Apache::Session::Browseable::DBI" : {
          "file" : "lib/Apache/Session/Browseable/DBI.pm",
@@ -152,6 +152,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "v1.2.7",
+   "version" : "v1.2.8",
    "x_serialization_backend" : "JSON::PP version 2.27400_02"
 }
