@@ -11,4 +11,9 @@ Module::Build->new(
     dist_version  => '1.3.0',
     autosplit     => [qw(lib/Apache/Session/Browseable/_common.pm)],
     configure_requires => { 'Module::Build' => 0, },
+    meta_merge => {
+        resources => {
+            repository => 'https://github.com/LemonLDAPNG/Apache-Session-Browseable'
+        }
+    },
 )->create_build_script;
