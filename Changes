@@ -77,5 +77,6 @@ Revision history for Perl extension Apache::Session::Browseable.
 1.2.8
     - Missing UTF-8 hook
 
-xx
+1.2.9
     - Use either Redis::Fast or Redis
+    - Fix error when searchOn is used without fields
