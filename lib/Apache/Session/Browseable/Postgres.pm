@@ -26,6 +26,40 @@ sub populate {
     return $self;
 }
 
+sub searchOn {
+    my $class = shift;
+    my ( $args, $selectField, $value, @fields ) = @_;
+    my $res = $class->SUPER::searchOn(@_);
+
+    # Ensure fields case is preserved
+    foreach (@fields) {
+        if ( $_ ne lc($_) ) {
+            foreach my $s ( keys %$res ) {
+                $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ }
+                  if $res->{$s}->{ lc $_ };
+            }
+        }
+    }
+    return $res;
+}
+
+sub searchOnExpr {
+    my $class = shift;
+    my ( $args, $selectField, $value, @fields ) = @_;
+    my $res = $class->SUPER::searchOnExpr(@_);
+
+    # Ensure fields case is preserved
+    foreach (@fields) {
+        if ( $_ ne lc($_) ) {
+            foreach my $s ( keys %$res ) {
+                $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ }
+                  if $res->{$s}->{ lc $_ };
+            }
+        }
+    }
+    return $res;
+}
+
 1;
 __END__
 
