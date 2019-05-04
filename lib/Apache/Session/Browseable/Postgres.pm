@@ -9,7 +9,7 @@ use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::DBI;
 
-our $VERSION = '1.2.5';
+our $VERSION = '1.3.1';
 our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 
 sub populate {
