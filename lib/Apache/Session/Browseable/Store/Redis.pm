@@ -23,6 +23,15 @@ sub new {
       if (  $session->{args}->{encoding}
         and $session->{args}->{encoding} eq "undef" );
 
+    # If sentinels is not given as an array ref, try to parse
+    # a comma delimited list instead
+    if ( $session->{args}->{sentinels}
+        and ref $session->{args}->{sentinels} ne 'ARRAY' )
+    {
+        $session->{args}->{sentinels} =
+          [ split /[,\s]+/, $session->{args}->{sentinels} ];
+    }
+
     $self->{cache} = $redis->new( %{ $session->{args} } );
 
     # Manage database
