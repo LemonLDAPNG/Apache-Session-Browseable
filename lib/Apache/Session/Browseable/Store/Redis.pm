@@ -2,7 +2,7 @@ package Apache::Session::Browseable::Store::Redis;
 
 use strict;
 
-our $VERSION = '1.2.2';
+our $VERSION = '1.3.2';
 our $redis;
 
 BEGIN {
