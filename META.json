@@ -10,7 +10,7 @@
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
-      "version" : 2
+      "version" : "2"
    },
    "name" : "Apache-Session-Browseable",
    "prereqs" : {
@@ -155,6 +155,6 @@
          "url" : "https://github.com/LemonLDAPNG/Apache-Session-Browseable"
       }
    },
-   "version" : "v1.3.2",
-   "x_serialization_backend" : "JSON::PP version 2.97001"
+   "version" : "v1.3.3",
+   "x_serialization_backend" : "JSON::PP version 2.27400_02"
 }
