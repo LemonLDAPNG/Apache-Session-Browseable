@@ -4,13 +4,13 @@
       "Xavier Guimard, E<lt>x.guimard@free.frE<gt>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4224",
+   "generated_by" : "Module::Build version 0.4229",
    "license" : [
       "perl_5"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
-      "version" : "2"
+      "version" : 2
    },
    "name" : "Apache-Session-Browseable",
    "prereqs" : {
@@ -156,5 +156,5 @@
       }
    },
    "version" : "v1.3.3",
-   "x_serialization_backend" : "JSON::PP version 2.27400_02"
+   "x_serialization_backend" : "JSON::PP version 2.97001"
 }
