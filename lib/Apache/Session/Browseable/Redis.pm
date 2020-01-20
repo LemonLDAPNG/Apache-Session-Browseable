@@ -147,6 +147,9 @@ Apache::Session::Redis
   my $args = {
        server => '127.0.0.1:6379',
 
+       # Select database (optional)
+       #database => 0,
+
        # Choose your browseable fileds
        Index          => 'uid mail',
   };
