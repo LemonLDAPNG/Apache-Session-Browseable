@@ -166,7 +166,7 @@ sub ldap {
             $self->{args}->{ldapPort} ? ( port => $self->{args}->{ldapPort} )
             : ()
         ),
-    ) or die( 'Unable to connect to ' . join( ' ', @servers ) );
+    ) or die( 'Unable to connect to ' . join( ' ', @servers ) . ": " . $@ );
 
     # Start TLS if needed
     if ($useTls) {
