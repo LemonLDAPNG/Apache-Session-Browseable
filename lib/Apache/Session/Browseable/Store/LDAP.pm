@@ -180,9 +180,9 @@ sub ldap {
 
     if ($useTls) {
         my %h = split( /[&=]/, $tlsParam );
-        $h{verify} = $self->{args}->{ldapVerify} || "require";
-        $h{cafile} = $caFile if ( $caFile );
-        $h{capath} = $caPath if ( $caPath );
+        $h{verify} ||= ( $self->{args}->{ldapVerify} || "require" );
+        $h{cafile} ||= $caFile if ($caFile);
+        $h{capath} ||= $caPath if ($caPath);
         my $start_tls = $ldap->start_tls(%h);
         if ( $start_tls->code ) {
             $self->logError($start_tls);
