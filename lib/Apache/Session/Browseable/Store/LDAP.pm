@@ -162,9 +162,9 @@ sub ldap {
     my $ldap = Net::LDAP->new(
         \@servers,
         onerror => undef,
-        verify => $self->{args}->{ldapVerify} || "require",
-	( $caFile ? ( cafile => $caFile ) : () ),
-	( $caPath ? ( capath => $caPath ) : () ),
+        verify  => $self->{args}->{ldapVerify} || "require",
+        ( $caFile ? ( cafile => $caFile ) : () ),
+        ( $caPath ? ( capath => $caPath ) : () ),
 
         (
             $self->{args}->{ldapRaw} ? ( raw => $self->{args}->{ldapRaw} )
