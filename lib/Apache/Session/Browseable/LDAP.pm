@@ -181,6 +181,8 @@ Apache::Session::Browseable::LDAP - An implementation of Apache::Session::LDAP
     ldapAttributeId      => 'cn',
     ldapAttributeContent => 'description',
     ldapAttributeIndex   => 'ou',
+    ldapVerify           => 'require',
+    ldapCAFile           => '/etc/ssl/certs/ca-certificates.crt',
   };
 
 =head1 DESCRIPTION
