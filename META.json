@@ -4,7 +4,7 @@
       "Xavier Guimard, E<lt>x.guimard@free.frE<gt>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4229",
+   "generated_by" : "Module::Build version 0.4231",
    "license" : [
       "perl_5"
    ],
@@ -156,5 +156,5 @@
       }
    },
    "version" : "v1.3.8",
-   "x_serialization_backend" : "JSON::PP version 2.97001"
+   "x_serialization_backend" : "JSON::PP version 4.02"
 }
