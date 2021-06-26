@@ -162,7 +162,7 @@ Apache::Session::Redis
        # Select database (optional)
        #database => 0,
 
-       # Choose your browseable fileds
+       # Choose your browseable fields
        Index          => 'uid mail',
   };
   
