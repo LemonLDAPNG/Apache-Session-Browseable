@@ -125,8 +125,8 @@ sub get_key_from_all_sessions {
     # Special case if all wanted fields are indexed
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
-        my $fields = join ',',
-          map { s/'//g; "a_session ->> '$_' AS $_" } @$data;
+        my $fields = join ',', 'id',
+          map { s/'//g; "a_session ->> '$_' AS \"$_\"" } @$data;
         $sth = $dbh->prepare("SELECT $fields from $table_name");
         $sth->execute;
         return $sth->fetchall_hashref('id');
