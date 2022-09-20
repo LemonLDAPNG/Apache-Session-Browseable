@@ -4,11 +4,11 @@ use strict;
 
 use Apache::Session;
 use Apache::Session::Lock::Null;
-use Apache::Session::Store::Postgres;
+use Apache::Session::Browseable::Store::Postgres;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 
-our $VERSION = '1.3.11';
+our $VERSION = '1.3.9';
 our @ISA     = qw(Apache::Session);
 
 sub populate {
