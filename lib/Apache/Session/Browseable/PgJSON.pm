@@ -4,7 +4,7 @@ use strict;
 
 use Apache::Session;
 use Apache::Session::Lock::Null;
-use Apache::Session::Browseable::Store::Postgres;
+use Apache::Session::Store::Postgres;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 
