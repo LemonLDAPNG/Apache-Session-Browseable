@@ -3,7 +3,7 @@ package Apache::Session::Browseable::Store::DBI;
 use strict;
 use Apache::Session::Store::DBI;
 our @ISA     = qw(Apache::Session::Store::DBI);
-our $VERSION = 1.3.10;
+our $VERSION = 1.3.11;
 
 sub insert {
     my ( $self, $session ) = @_;
