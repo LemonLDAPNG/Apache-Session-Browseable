@@ -3,7 +3,7 @@ package Apache::Session::Browseable::Store::DBI;
 use strict;
 use Apache::Session::Store::DBI;
 our @ISA     = qw(Apache::Session::Store::DBI);
-our $VERSION = 1.3.11;
+our $VERSION = 1.3.10;
 
 sub insert {
     my ( $self, $session ) = @_;
@@ -18,14 +18,12 @@ sub insert {
       : [ split /\s+/, $session->{args}->{Index} ];
 
     if ( !defined $self->{insert_sth} ) {
-        $self->{insert_sth} = $self->{dbh}->prepare_cached(
-            "INSERT INTO $self->{table_name} ("
-              . join( ',',
-                'id', 'a_session',
-                map { s/'/''/g; $self->{dbh}->quote_identifier($_) } @$index )
+        $self->{insert_sth} =
+          $self->{dbh}->prepare_cached( "INSERT INTO $self->{table_name} ("
+              . join( ',', 'id', 'a_session', map { s/'/''/g; $_ } @$index )
               . ') VALUES ('
-              . join( ',', ('?') x ( 2 + @$index ) ) . ')'
-        );
+              . join( ',', ('?') x ( 2 + @$index ) )
+              . ')' );
     }
 
     $self->{insert_sth}->bind_param( 1, $session->{data}->{_session_id} );
