@@ -17,10 +17,10 @@ name: Apache-Session-Browseable
 provides:
   Apache::Session::Browseable:
     file: lib/Apache/Session/Browseable.pm
-    version: v1.3.12
+    version: v1.3.13
   Apache::Session::Browseable::Cassandra:
     file: lib/Apache/Session/Browseable/Cassandra.pm
-    version: v1.3.12
+    version: v1.3.13
   Apache::Session::Browseable::DBI:
     file: lib/Apache/Session/Browseable/DBI.pm
     version: v1.3.9
@@ -59,10 +59,10 @@ provides:
     version: v1.2.2
   Apache::Session::Browseable::Store::Cassandra:
     file: lib/Apache/Session/Browseable/Store/Cassandra.pm
-    version: v1.3.12
+    version: v1.3.13
   Apache::Session::Browseable::Store::DBI:
     file: lib/Apache/Session/Browseable/Store/DBI.pm
-    version: v1.3.10
+    version: v1.3.11
   Apache::Session::Browseable::Store::File:
     file: lib/Apache/Session/Browseable/Store/File.pm
     version: v1.2.2
@@ -113,5 +113,5 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/LemonLDAPNG/Apache-Session-Browseable
-version: v1.3.12
+version: v1.3.13
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

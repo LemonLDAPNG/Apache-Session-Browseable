@@ -7,7 +7,7 @@ use Apache::Session::Browseable::Store::DBI;
 use Apache::Session::Browseable::Store::Cassandra;
 
 our @ISA     = qw(Apache::Session::Browseable::Store::DBI);
-our $VERSION = '1.3.12';
+our $VERSION = '1.3.13';
 
 our $DataSource = undef;
 our $UserName   = undef;
@@ -88,14 +88,14 @@ Apache::Session::Browseable::Store::Cassandra - Store persistent data in a Cassa
 
 =head1 SYNOPSIS
 
- use Apache::Session::Browseable::Store::Cassandra;
-
- my $store = new Apache::Session::Browseable::Store::Cassandra;
-
- $store->insert($ref);
- $store->update($ref);
- $store->materialize($ref);
- $store->remove($ref);
+  use Apache::Session::Browseable::Store::Cassandra;
+  
+  my $store = new Apache::Session::Browseable::Store::Cassandra;
+  
+  $store->insert($ref);
+  $store->update($ref);
+  $store->materialize($ref);
+  $store->remove($ref);
 
 =head1 DESCRIPTION
 
@@ -107,18 +107,15 @@ Apache::Session. Session data is stored in a Cassandra database.
 To use this module, you will need at least these columns in a table
 called 'sessions':
 
- id char(32)     # or however long your session IDs are.
- a_session lvarchar
+  id text
+  a_session text
 
-To create this schema, you can execute this command using the sqlplus program:
+To create this schema, you can execute this command using cqlsh:
 
- CREATE TABLE sessions (
-    id char(32) not null primary key,
-    a_session lvarchar
- );
-
-If you use some other command, ensure that there is a unique index on the
-table's id column.
+  CREATE TABLE sessions (
+     id text PRIMARY KEY,
+     a_session text
+  );
 
 =head1 CONFIGURATION
 
@@ -130,7 +127,7 @@ and Password.
 Example:
 
  tie %hash, 'Apache::Session::Cassandra', $id, {
-     DataSource => 'dbi:Cassandra:database',
+     DataSource => 'dbi:Cassandra:host=localhost;keyspace=llng',
      UserName   => 'database_user',
      Password   => 'K00l'
  };
@@ -140,9 +137,6 @@ Instead, you may pass in an already-opened DBI handle to your database.
  tie %hash, 'Apache::Session::Cassandra', $id, {
      Handle => $dbh
  };
-
-The last option is LongReadLen, which specifies the maximum size of the session
-object.  If not supplied, the default maximum size is 8 KB.
 
 =head1 AUTHOR
 

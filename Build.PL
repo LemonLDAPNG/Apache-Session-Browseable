@@ -13,7 +13,7 @@ Module::Build->new(
         'Redis'          => 0,
     },
     test_requires      => { DBI => 0, 'DBD::SQLite' => 0, },
-    dist_version       => '1.3.12',
+    dist_version       => '1.3.13',
     autosplit          => [qw(lib/Apache/Session/Browseable/_common.pm)],
     configure_requires => { 'Module::Build' => 0, },
     meta_merge         => {
