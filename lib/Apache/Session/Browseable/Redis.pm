@@ -98,7 +98,7 @@ sub get_key_from_all_sessions {
         eval {
             my $v   = $redisObj->get($k);
             next unless $v;
-            my $tmp = unserialize($v);
+            my $tmp = eval { unserialize($v) };
             if ( ref($data) eq 'CODE' ) {
                 $tmp = &$data( $tmp, $k );
                 $res{$k} = $tmp if ( defined($tmp) );
