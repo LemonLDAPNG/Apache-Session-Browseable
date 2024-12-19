@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Perl dependencies
-        run: sudo apt install libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl
+        run: sudo apt install libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libdbd-cassandra-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl
       - name: Build and run tests
         run: |
           perl Build.PL
