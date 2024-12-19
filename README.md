@@ -1,5 +1,7 @@
 # Apache::Session::Browseable
 
+[![Build Status](https://github.com/LemonLDAPNG/Apache-Session-Browseable/actions/workflows/ci.yml/badge.svg)](https://github.com/LemonLDAPNG/Apache-Session-Browseable/actions/workflows/ci.yml)
+
 This module is an Apache::Session implementation allowing to define index to speed up searches.
 
 ## Installation
