@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install Perl dependencies
+        run: apt install libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl
       - name: Build and run tests
         run: |
           perl Build.PL
