@@ -1,7 +1,5 @@
 # Apache::Session::Browseable
 
-[![Build Status](https://travis-ci.org/LemonLDAPNG/Apache-Session-Browseable.svg?branch=master)](https://travis-ci.org/LemonLDAPNG/Apache-Session-Browseable)
-
 This module is an Apache::Session implementation allowing to define index to speed up searches.
 
 ## Installation
