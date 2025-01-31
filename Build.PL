@@ -10,7 +10,7 @@ Module::Build->new(
         'DBI'            => 0,
         'Net::LDAP'      => 0.38,
         'DBD::Cassandra' => 0,
-        'Redis'          => 0,
+        'Redis::Fast'    => 0,
     },
     test_requires      => { DBI => 0, 'DBD::SQLite' => 0, },
     dist_version       => '1.3.13',
