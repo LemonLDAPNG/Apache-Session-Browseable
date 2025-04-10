@@ -92,30 +92,41 @@ sub get_key_from_all_sessions {
     my %res;
 
     my $redisObj = $class->_getRedis($args);
-    my @keys     = $redisObj->keys('*');
-    foreach my $k (@keys) {
-        next if ( !$k or $k =~ /_/ );
-        eval {
-            my $v   = $redisObj->get($k);
-            next unless $v;
-            my $tmp = unserialize($v);
-            if ( ref($data) eq 'CODE' ) {
-                $tmp = &$data( $tmp, $k );
-                $res{$k} = $tmp if ( defined($tmp) );
+    my $cursor   = 0;
+    do {
+        my ( $new_cursor, $keys ) = $redisObj->scan($cursor);
+        foreach my $k (@$keys) {
+
+            # Keep only our keys
+            next unless $k =~ /^[0-9a-f]+$/;
+
+            # Don't scan sets,...
+            next unless $redisObj->type($k) eq 'string';
+            eval {
+                my $v = $redisObj->get($k);
+                next unless $v;
+                my $tmp = unserialize($v);
+                if ( ref($data) eq 'CODE' ) {
+                    $tmp = &$data( $tmp, $k );
+                    $res{$k} = $tmp if ( defined($tmp) );
+                }
+                elsif ($data) {
+                    $data = [$data] unless ( ref($data) );
+                    $res{$k}->{$_} = $tmp->{$_} foreach (@$data);
+                }
+                else {
+                    $res{$k} = $tmp;
+                }
+            };
+            if ($@) {
+                print STDERR "Error in session $k: $@\n";
+
+                # Don't delete, it may own to another app
+                #delete $res{$k};
             }
-            elsif ($data) {
-                $data = [$data] unless ( ref($data) );
-                $res{$k}->{$_} = $tmp->{$_} foreach (@$data);
-            }
-            else {
-                $res{$k} = $tmp;
-            }
-        };
-        if ($@) {
-            print STDERR "Error in session $k: $@\n";
-            delete $res{$k};
         }
-    }
+        $cursor = $new_cursor;
+    } while ( $cursor != 0 );
     return \%res;
 }
 
