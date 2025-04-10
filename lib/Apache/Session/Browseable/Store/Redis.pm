@@ -51,8 +51,8 @@ sub insert {
     my $id = $session->{data}->{_session_id};
     $self->{cache}->set( $id, $session->{serialized} );
     foreach my $i (@$index) {
-        my $t;
-        next unless ( $t = $session->{data}->{$i} );
+        my $t = $session->{data}->{$i};
+        next unless ( defined($t) and ( length($t) > 0 ) );
         $self->{cache}->sadd( "${i}_$t", $id );
     }
 }

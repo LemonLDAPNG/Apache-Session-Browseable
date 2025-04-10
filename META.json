@@ -16,25 +16,25 @@
    "prereqs" : {
       "configure" : {
          "requires" : {
-            "Module::Build" : "0"
+            "Module::Build" : 0
          }
       },
       "runtime" : {
          "recommends" : {
-            "DBD::Cassandra" : "0",
-            "DBI" : "0",
-            "Net::LDAP" : "0.38",
-            "Redis" : "0"
+            "DBD::Cassandra" : 0,
+            "DBI" : 0,
+            "Net::LDAP" : 0.38,
+            "Redis::Fast" : 0
          },
          "requires" : {
-            "Apache::Session" : "0",
-            "JSON" : "0"
+            "Apache::Session" : 0,
+            "JSON" : 0
          }
       },
       "test" : {
          "requires" : {
-            "DBD::SQLite" : "0",
-            "DBI" : "0"
+            "DBD::SQLite" : 0,
+            "DBI" : 0
          }
       }
    },
@@ -166,5 +166,5 @@
       }
    },
    "version" : "v1.3.13",
-   "x_serialization_backend" : "JSON::PP version 4.07"
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }
