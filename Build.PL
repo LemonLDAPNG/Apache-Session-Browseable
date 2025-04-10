@@ -3,6 +3,7 @@ use Module::Build;
 # See perldoc Module::Build for details of how this works
 
 Module::Build->new(
+    dist_author => 'LLNG Team <https://lemonldap-ng.org>',
     module_name => 'Apache::Session::Browseable',
     license     => 'perl',
     requires    => { 'Apache::Session' => 0, 'JSON' => 0, },
