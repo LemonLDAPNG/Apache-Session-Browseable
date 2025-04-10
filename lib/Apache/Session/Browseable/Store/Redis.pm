@@ -2,7 +2,7 @@ package Apache::Session::Browseable::Store::Redis;
 
 use strict;
 
-our $VERSION = '1.3.2';
+our $VERSION = '1.3.15';
 our $redis;
 
 BEGIN {
@@ -114,15 +114,15 @@ L<Apache::Session::Browseable>, L<Apache::Session::NoSQL>, L<Apache::Session>
 
 =over
 
-=item 2009-2023 by Xavier Guimard
+=item 2009-2025 by Xavier Guimard
 
-=item 2013-2023 by Clément Oudot
+=item 2013-2025 by Clément Oudot
 
-=item 2019-2023 by Maxime Besson
+=item 2019-2025 by Maxime Besson
 
-=item 2013-2023 by Worteks
+=item 2013-2025 by Worteks
 
-=item 2023 by Linagora
+=item 2023-2025 by Linagora
 
 =back
 
