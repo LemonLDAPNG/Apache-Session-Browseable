@@ -8,7 +8,7 @@ use Apache::Session::Store::Postgres;
 our @ISA     = qw(Apache::Session::Store::Postgres);
 our $VERSION = '1.3.17';
 
-our $knownMappings;
+our %knownMappings;
 
 sub connection {
     my $self    = shift;
@@ -24,6 +24,12 @@ sub connection {
         $self->{commit} = $session->{args}->{Commit};
         return;
     }
+
+    # Use last known Patroni response if available
+    $session->{args}->{DataSource} =
+      $knownMappings{ $session->{args}->{DataSource} }
+      if $session->{args}->{DataSource}
+      and $knownMappings{ $session->{args}->{DataSource} };
 
     foreach ( 0 .. 1 ) {
         (
@@ -129,10 +135,12 @@ sub checkMaster {
                   . $resp->decoded_content;
                 next;
             }
+            my $old = $args->{DataSource};
             $args->{DataSource} =~ s/(?:port|host)=[^;]+;*//g;
             $args->{DataSource} =~ s/;$//;
             $args->{DataSource} .= ( $args->{DataSource} =~ /:$/ ? '' : ';' )
               . "host=$leader->{host};port=$leader->{port}";
+            $knownMappings{$old} = $args->{DataSource};
             $res = 1;
             last;
         }
