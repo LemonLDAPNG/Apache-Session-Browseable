@@ -3,7 +3,9 @@ package Apache::Session::Browseable::Store::Redis;
 use strict;
 
 our $VERSION = '1.3.15';
+
 our $redis;
+our %reused_connections;
 
 BEGIN {
     $redis = 'Redis::Fast';
@@ -67,6 +69,7 @@ sub remove {
 sub _getRedis {
     my $class = shift;
     my $args  = shift;
+    my $redisObj;
 
     # Manage undef encoding
     $args->{encoding} = undef
@@ -82,7 +85,17 @@ sub _getRedis {
           [ split /[,\s]+/, $args->{sentinels} ];
     }
 
-    my $redisObj = $redis->new( %{$args} );
+    if (    $args->{reuse}
+        and $reused_connections{ $args->{reuse} } )
+    {
+        $redisObj = $reused_connections{ $args->{reuse} };
+    }
+    else {
+        $redisObj = $redis->new( %{$args} );
+        if ( $args->{reuse} ) {
+            $reused_connections{ $args->{reuse} } = $redisObj;
+        }
+    }
 
     # Manage database
     $redisObj->select( $args->{database} )
