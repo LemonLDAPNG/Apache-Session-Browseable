@@ -256,6 +256,12 @@ Apache::Session::Redis
        # Select database (optional)
        #database => 0,
 
+       # Use a persistent connection to the Redis server
+       # (value is the connection cache key)
+       # You'll probably also want to set
+       # read_timeout, write_timeout, reconnect and every
+       reuse => "myserver",
+
        # Choose your browseable fields
        Index          => 'uid mail',
   };
