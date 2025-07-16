@@ -18,25 +18,7 @@ sub new {
     my ( $class, $session ) = @_;
     my $self;
 
-    # Manage undef encoding
-    $session->{args}->{encoding} = undef
-      if (  $session->{args}->{encoding}
-        and $session->{args}->{encoding} eq "undef" );
-
-    # If sentinels is not given as an array ref, try to parse
-    # a comma delimited list instead
-    if ( $session->{args}->{sentinels}
-        and ref $session->{args}->{sentinels} ne 'ARRAY' )
-    {
-        $session->{args}->{sentinels} =
-          [ split /[,\s]+/, $session->{args}->{sentinels} ];
-    }
-
-    $self->{cache} = $redis->new( %{ $session->{args} } );
-
-    # Manage database
-    $self->{cache}->select( $session->{args}->{database} )
-      if defined $session->{args}->{database};
+    $self->{cache} = $class->_getRedis( $session->{args} );
 
     bless $self, $class;
 }
@@ -80,6 +62,32 @@ sub remove {
         eval { $self->{cache}->srem( "${i}_$t", $id ); };
     }
     $self->{cache}->del($id);
+}
+
+sub _getRedis {
+    my $class = shift;
+    my $args  = shift;
+
+    # Manage undef encoding
+    $args->{encoding} = undef
+      if (  $args->{encoding}
+        and $args->{encoding} eq "undef" );
+
+    # If sentinels is not given as an array ref, try to parse
+    # a comma delimited list instead
+    if ( $args->{sentinels}
+        and ref $args->{sentinels} ne 'ARRAY' )
+    {
+        $args->{sentinels} =
+          [ split /[,\s]+/, $args->{sentinels} ];
+    }
+
+    my $redisObj = $redis->new( %{$args} );
+
+    # Manage database
+    $redisObj->select( $args->{database} )
+      if defined $args->{database};
+    return $redisObj;
 }
 
 1;
