@@ -2,7 +2,7 @@ package Apache::Session::Browseable::Store::Redis;
 
 use strict;
 
-our $VERSION = '1.3.15';
+our $VERSION = '1.3.18';
 
 our $redis;
 our %reused_connections;
