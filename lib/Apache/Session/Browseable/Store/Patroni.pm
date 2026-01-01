@@ -6,7 +6,7 @@ use DBI;
 use Apache::Session::Store::Postgres;
 
 our @ISA     = qw(Apache::Session::Store::Postgres);
-our $VERSION = '1.3.17';
+our $VERSION = '1.3.19';
 
 # Cache structure per DataSource:
 # {
@@ -180,7 +180,7 @@ sub checkMaster {
             }
 
             # Validate leader has required fields
-            unless ( $leader->{host} && $leader->{port} ) {
+            unless ( defined $leader->{host} && defined $leader->{port} ) {
                 print STDERR "Leader missing host or port from $patroniUrl: "
                   . $resp->decoded_content . "\n";
                 next;

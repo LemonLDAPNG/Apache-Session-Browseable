@@ -8,7 +8,7 @@ use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 
 our @ISA     = qw(Apache::Session::Browseable::PgJSON);
-our $VERSION = '1.3.17';
+our $VERSION = '1.3.19';
 
 sub populate {
     my $self = shift;
@@ -103,7 +103,7 @@ cache, allowing multiple Patroni clusters to be used simultaneously.
 
 =head1 SEE ALSO
 
-L<http://lemonldap-ng.org>, L<Apache::Session::Postgres>
+L<http://lemonldap-ng.org>, L<Apache::Session::Browseable::PgJSON>
 
 =head1 COPYRIGHT AND LICENSE
 
