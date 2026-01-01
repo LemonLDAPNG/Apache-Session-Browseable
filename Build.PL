@@ -17,7 +17,11 @@ Module::Build->new(
         'DBD::Cassandra' => 0,
         'Redis::Fast'    => 0,
     },
-    test_requires      => { DBI => 0, 'DBD::SQLite' => 0, },
+    test_requires => {
+        DBI                   => 0,
+        'DBD::SQLite'         => 0,
+        'LWP::Protocol::PSGI' => 0,
+    },
     dist_version       => '1.3.19',
     autosplit          => [qw(lib/Apache/Session/Browseable/_common.pm)],
     configure_requires => { 'Module::Build' => 0, },
