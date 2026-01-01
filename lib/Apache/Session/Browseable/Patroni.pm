@@ -64,6 +64,11 @@ Use it with Perl:
        # PatroniTimeout             => 3,   # API request timeout in seconds
        # PatroniCacheTTL            => 60,  # Leader cache TTL in seconds
        # PatroniCircuitBreakerDelay => 30,  # Delay before retrying failed API
+
+       # SSL options (verification enabled by default):
+       # PatroniVerifySSL           => 1,   # Verify SSL certificates (default: 1)
+       # PatroniSSLCAFile           => '/path/to/ca.pem',  # Custom CA file
+       # PatroniSSLCAPath           => '/path/to/certs/',  # Custom CA directory
   };
 
   # Use it like L<Apache::Session::Browseable::PgJSON>
@@ -98,6 +103,38 @@ before using it.
 
 =item * B<Multi-source support>: Each DataSource maintains its own independent
 cache, allowing multiple Patroni clusters to be used simultaneously.
+
+=back
+
+=head2 SSL/TLS Configuration
+
+By default, SSL certificate verification is B<enabled> when connecting to
+HTTPS Patroni endpoints. This protects against man-in-the-middle attacks.
+
+Available SSL options:
+
+=over 4
+
+=item * C<PatroniVerifySSL> (default: 1)
+
+Set to 0 to disable SSL certificate verification. B<Warning>: This makes
+HTTPS connections vulnerable to MITM attacks. Only use in development or
+when you have other network-level protections.
+
+  PatroniVerifySSL => 0,  # INSECURE - disable SSL verification
+
+=item * C<PatroniSSLCAFile>
+
+Path to a custom CA certificate file (PEM format) for verifying the Patroni
+API server certificate.
+
+  PatroniSSLCAFile => '/etc/ssl/certs/patroni-ca.pem',
+
+=item * C<PatroniSSLCAPath>
+
+Path to a directory containing CA certificates for verification.
+
+  PatroniSSLCAPath => '/etc/ssl/certs/',
 
 =back
 

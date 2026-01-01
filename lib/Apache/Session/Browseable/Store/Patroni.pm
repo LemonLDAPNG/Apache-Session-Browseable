@@ -138,13 +138,29 @@ sub checkMaster {
     require JSON;
     require LWP::UserAgent;
     require IO::Socket::SSL;
-    my $ua = LWP::UserAgent->new(
-        env_proxy => 1,
-        ssl_opts  => {
+
+    # SSL verification: secure by default, can be disabled with PatroniVerifySSL => 0
+    my $verify_ssl = $args->{PatroniVerifySSL} // 1;
+    my %ssl_opts;
+    if ($verify_ssl) {
+        %ssl_opts = (
+            verify_hostname => 1,
+            SSL_verify_mode => &IO::Socket::SSL::SSL_VERIFY_PEER,
+            ( $args->{PatroniSSLCAFile} ? ( SSL_ca_file => $args->{PatroniSSLCAFile} ) : () ),
+            ( $args->{PatroniSSLCAPath} ? ( SSL_ca_path => $args->{PatroniSSLCAPath} ) : () ),
+        );
+    }
+    else {
+        %ssl_opts = (
             verify_hostname => 0,
             SSL_verify_mode => &IO::Socket::SSL::SSL_VERIFY_NONE,
-        },
-        timeout => $args->{PatroniTimeout} || 3,
+        );
+    }
+
+    my $ua = LWP::UserAgent->new(
+        env_proxy => 1,
+        ssl_opts  => \%ssl_opts,
+        timeout   => $args->{PatroniTimeout} || 3,
     );
     my $res;
 
