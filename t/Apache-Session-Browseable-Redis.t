@@ -16,7 +16,7 @@ plan skip_all => "Redis error : $@"
     $r->flushall();
   };
 
-plan tests => 46;
+plan tests => 45;
 
 $package = 'Apache::Session::Browseable::Redis';
 
