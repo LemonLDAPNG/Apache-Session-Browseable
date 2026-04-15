@@ -16,7 +16,7 @@ plan skip_all => "Redis error : $@"
     $r->flushall();
   };
 
-plan tests => 32;
+plan tests => 46;
 
 $package = 'Apache::Session::Browseable::Redis';
 
@@ -159,6 +159,51 @@ is( $hash->{$id3}->{uid}, 'luke', "Correct value" );
 is( $hash->{$id5}->{uid}, 'yoda', "Correct value" );
 ok( !defined( $hash->{$id3}->{sn} ), 'only uid is returned' );
 
+# Test that updating an indexed field cleans up the old index
+tie %session1, $package, $id1, $args;
+ok( $r->sismember( "uid_obiwan", $id1 ),
+    "Before update: id1 is in uid_obiwan index" );
+$session1{uid} = 'benkenobi';
+untie %session1;
+
+ok( !$r->sismember( "uid_obiwan", $id1 ),
+    "After update: id1 removed from old uid_obiwan index" );
+ok( $r->sismember( "uid_benkenobi", $id1 ),
+    "After update: id1 added to new uid_benkenobi index" );
+
+# Verify searchOn uses the updated index
+$hash = $package->searchOn( $args, 'uid', 'obiwan' );
+is( keys %$hash, 0, "searchOn old value returns nothing" );
+
+$hash = $package->searchOn( $args, 'uid', 'benkenobi' );
+is( keys %$hash,            1,          "searchOn new value returns 1" );
+is( $hash->{$id1}->{uid}, 'benkenobi', "Correct updated value" );
+
+# Restore original value for subsequent tests
+tie %session1, $package, $id1, $args;
+$session1{uid} = 'obiwan';
+untie %session1;
+
+# Test that setting an indexed field to empty removes the index entry
+tie %session1, $package, $id1, $args;
+$session1{sn} = 'Kenobi';
+untie %session1;
+
+ok( $r->sismember( "sn_Kenobi", $id1 ), "sn_Kenobi index contains id1" );
+
+tie %session1, $package, $id1, $args;
+$session1{sn} = '';
+untie %session1;
+
+ok( !$r->sismember( "sn_Kenobi", $id1 ),
+    "After clearing sn, old index entry removed" );
+
+# Restore for deleteIfLowerThan test
+tie %session1, $package, $id1, $args;
+$session1{sn} = 'Kenobi';
+untie %session1;
+
+# Test deleteIfLowerThan cleans up indexes
 $package->deleteIfLowerThan(
     $args,
     {
@@ -173,6 +218,18 @@ $package->deleteIfLowerThan(
 );
 
 $hash = $package->get_key_from_all_sessions($args);
-is( keys %$hash,          3,      "Found 3 session" );
+is( keys %$hash, 3, "Found 3 sessions after deleteIfLowerThan" );
+
+# Verify that deleted sessions were removed from indexes
+ok( !$r->sismember( "uid_obiwan", $id1 ),
+    "deleteIfLowerThan cleaned uid index for deleted session" );
+ok( !$r->sismember( "sn_Kenobi", $id1 ),
+    "deleteIfLowerThan cleaned sn index for deleted session" );
+ok( !$r->sismember( "uid_darthvader", $id2 ),
+    "deleteIfLowerThan cleaned uid index for session 2" );
+ok( $r->sismember( "uid_luke", $id3 ),
+    "Surviving session still in uid index" );
+ok( $r->sismember( "uid_yoda", $id5 ),
+    "Excluded session (yoda) still in uid index" );
 
 $r->flushall;
