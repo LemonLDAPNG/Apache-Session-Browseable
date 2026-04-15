@@ -1,5 +1,5 @@
 use Test::More;
-use JSON qw/from_json/;
+use JSON qw/from_json encode_json/;
 use utf8;
 
 our $test_dburl = $ENV{REDIS_URL}   || 'localhost:6379';
@@ -16,7 +16,7 @@ plan skip_all => "Redis error : $@"
     $r->flushall();
   };
 
-plan tests => 45;
+plan tests => 48;
 
 $package = 'Apache::Session::Browseable::Redis';
 
@@ -231,5 +231,35 @@ ok( $r->sismember( "uid_luke", $id3 ),
     "Surviving session still in uid index" );
 ok( $r->sismember( "uid_yoda", $id5 ),
     "Excluded session (yoda) still in uid index" );
+
+# Test that deleteIfLowerThan purges sessions missing required fields
+# Create a session with no _utime (simulates an empty/interrupted session)
+my %session_empty;
+tie %session_empty, $package, undef, $args;
+my $id_empty = $session_empty{_session_id};
+$session_empty{uid} = 'ghost';
+untie %session_empty;
+
+# Remove _utime manually to simulate a bare session
+my $raw_empty = $r->get($id_empty);
+my $data_empty = from_json($raw_empty);
+delete $data_empty->{_utime};
+$r->set($id_empty, JSON::encode_json($data_empty));
+
+$hash = $package->get_key_from_all_sessions($args);
+ok( exists $hash->{$id_empty}, "Empty session exists before purge" );
+
+$package->deleteIfLowerThan(
+    $args,
+    {
+        or => { _utime => time },
+    }
+);
+
+$hash = $package->get_key_from_all_sessions($args);
+ok( !exists $hash->{$id_empty},
+    "Session without _utime purged by deleteIfLowerThan" );
+ok( !$r->sismember( "uid_ghost", $id_empty ),
+    "Index cleaned for purged empty session" );
 
 $r->flushall;
