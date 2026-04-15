@@ -38,12 +38,17 @@ sub searchOn {
     my %res = ();
     if ( $class->isIndexed( $args, $selectField ) ) {
 
-        my $redisObj = $class->_getRedis($args);
-        my @keys     = $redisObj->smembers("${selectField}_$value");
+        my $redisObj  = $class->_getRedis($args);
+        my $index_key = "${selectField}_$value";
+        my @keys      = $redisObj->smembers($index_key);
         foreach my $k (@keys) {
             next unless ($k);
             my $tmp = $redisObj->get($k);
-            next unless ($tmp);
+            unless ($tmp) {
+                # Lazy cleanup: remove orphan from index
+                eval { $redisObj->srem( $index_key, $k ) };
+                next;
+            }
             eval {
                 $tmp = unserialize($tmp);
                 if (@fields) {
@@ -95,7 +100,11 @@ sub searchOnExpr {
                 my @keys = $redisObj->smembers($set);
                 foreach my $k (@keys) {
                     my $v = $redisObj->get($k);
-                    next unless $v;
+                    unless ($v) {
+                        # Lazy cleanup: remove orphan from index
+                        eval { $redisObj->srem( $set, $k ) };
+                        next;
+                    }
                     my $tmp = unserialize($v);
                     if ($tmp) {
                         $res{$k} = $class->extractFields( $tmp, @fields );
@@ -294,6 +303,9 @@ Apache::Session::Redis
 
        # Choose your browseable fields
        Index          => 'uid mail',
+
+       # Optional: set a Redis TTL on session keys (in seconds)
+       # TTL => 86400,
   };
   
   # Use it like Apache::Session

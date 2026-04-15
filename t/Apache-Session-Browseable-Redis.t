@@ -16,7 +16,7 @@ plan skip_all => "Redis error : $@"
     $r->flushall();
   };
 
-plan tests => 48;
+plan tests => 58;
 
 $package = 'Apache::Session::Browseable::Redis';
 
@@ -261,5 +261,57 @@ ok( !exists $hash->{$id_empty},
     "Session without _utime purged by deleteIfLowerThan" );
 ok( !$r->sismember( "uid_ghost", $id_empty ),
     "Index cleaned for purged empty session" );
+
+# Test lazy cleanup of orphan index entries in searchOn/searchOnExpr
+$r->flushall;
+
+my %session_lz1;
+tie %session_lz1, $package, undef, $args;
+$session_lz1{uid}  = 'alive';
+$session_lz1{mail} = 'alive@test.com';
+my $id_lz1 = $session_lz1{_session_id};
+untie %session_lz1;
+
+my %session_lz2;
+tie %session_lz2, $package, undef, $args;
+$session_lz2{uid}  = 'alive';
+$session_lz2{mail} = 'dead@test.com';
+my $id_lz2 = $session_lz2{_session_id};
+untie %session_lz2;
+
+# Both should be in uid_alive index
+ok( $r->sismember( "uid_alive", $id_lz1 ), "Session lz1 in uid_alive index" );
+ok( $r->sismember( "uid_alive", $id_lz2 ), "Session lz2 in uid_alive index" );
+
+# Delete lz2 directly from Redis (simulates TTL expiration)
+$r->del($id_lz2);
+
+# searchOn should return only lz1 and clean orphan lz2 from index
+$hash = $package->searchOn( $args, 'uid', 'alive' );
+is( keys %$hash, 1, "searchOn returns only the surviving session" );
+ok( exists $hash->{$id_lz1}, "searchOn returns lz1" );
+ok( !$r->sismember( "uid_alive", $id_lz2 ),
+    "searchOn lazy cleanup removed orphan lz2 from index" );
+ok( $r->sismember( "uid_alive", $id_lz1 ),
+    "searchOn kept valid lz1 in index" );
+
+# Test lazy cleanup in searchOnExpr
+my %session_lz3;
+tie %session_lz3, $package, undef, $args;
+$session_lz3{uid}  = 'expr_test';
+$session_lz3{mail} = 'expr@test.com';
+my $id_lz3 = $session_lz3{_session_id};
+untie %session_lz3;
+
+ok( $r->sismember( "uid_expr_test", $id_lz3 ), "Session lz3 in uid_expr_test index" );
+
+# Delete lz3 directly (simulates TTL expiration)
+$r->del($id_lz3);
+
+# searchOnExpr should clean orphan
+$hash = $package->searchOnExpr( $args, 'uid', 'expr_*' );
+is( keys %$hash, 0, "searchOnExpr returns nothing for expired session" );
+ok( !$r->sismember( "uid_expr_test", $id_lz3 ),
+    "searchOnExpr lazy cleanup removed orphan lz3 from index" );
 
 $r->flushall;
