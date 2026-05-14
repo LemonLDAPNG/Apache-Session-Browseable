@@ -101,7 +101,7 @@ provides:
     version: v1.2.2
   Apache::Session::Generate::SHA256:
     file: lib/Apache/Session/Generate/SHA256.pm
-    version: v1.2.2
+    version: v1.3.19
   Apache::Session::Serialize::Hstore:
     file: lib/Apache/Session/Serialize/Hstore.pm
     version: v1.2.5
@@ -115,9 +115,10 @@ recommends:
   Redis::Fast: '0'
 requires:
   Apache::Session: '0'
+  Crypt::URandom: '0'
   JSON: '0'
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/LemonLDAPNG/Apache-Session-Browseable
-version: v1.3.17
+version: v1.3.19
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

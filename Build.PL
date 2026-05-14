@@ -6,7 +6,11 @@ Module::Build->new(
     dist_author => 'LLNG Team <https://lemonldap-ng.org>',
     module_name => 'Apache::Session::Browseable',
     license     => 'perl',
-    requires    => { 'Apache::Session' => 0, 'JSON' => 0, },
+    requires    => {
+        'Apache::Session' => 0,
+        'JSON'            => 0,
+        'Crypt::URandom'  => 0,
+    },
     recommends  => {
         'DBI'            => 0,
         'Net::LDAP'      => 0.38,
@@ -14,7 +18,7 @@ Module::Build->new(
         'Redis::Fast'    => 0,
     },
     test_requires      => { DBI => 0, 'DBD::SQLite' => 0, },
-    dist_version       => '1.3.18',
+    dist_version       => '1.3.19',
     autosplit          => [qw(lib/Apache/Session/Browseable/_common.pm)],
     configure_requires => { 'Module::Build' => 0, },
     meta_merge         => {
