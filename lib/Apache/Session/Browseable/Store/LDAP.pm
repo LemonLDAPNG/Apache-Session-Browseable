@@ -310,6 +310,8 @@ Example:
 
 =item 2023-2025 by Linagora
 
+=item 2026 by Christophe Maudoux
+
 =back
 
 This library is free software; you can redistribute it and/or modify
