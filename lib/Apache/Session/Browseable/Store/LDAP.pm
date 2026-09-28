@@ -196,8 +196,7 @@ sub ldap {
         # CentOS7 has a bug in which IO::Socket::SSL will return a broken
         # socket when certificate validation fails. Net::LDAP does not catch
         # it, and the process ends up crashing.
-        # As a precaution, make sure the underlying socket is doing fine:
-
+        # As a precaution, make sure the underlying socket is doing fine.
         #
         # Note: IO::Socket::SSL may retain a stale or unrelated error message
         # (for example, "SSL wants a read first"), which can cause this check
