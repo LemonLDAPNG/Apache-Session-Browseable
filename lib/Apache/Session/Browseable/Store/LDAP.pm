@@ -2,8 +2,9 @@ package Apache::Session::Browseable::Store::LDAP;
 
 use strict;
 use Net::LDAP;
+use IO::Socket::Timeout;
 
-our $VERSION = '1.3.9';
+our $VERSION = '1.4.0';
 
 sub new {
     my $class = shift;
@@ -163,17 +164,9 @@ sub ldap {
       $self->{args}->{ldapCAFile} || $self->{args}->{caFile};
     $tlsParams{capath} ||=
       $self->{args}->{ldapCAPath} || $self->{args}->{caPath};
-    $tlsParams{verify} ||= $self->{args}->{ldapVerify} || "require";
-    eval { require Authen::SASL if $self->{args}->{ldapClientCert}; };
-    if ($@) {
-        die( 'Authen::SASL is required to connect using mTLS: ' . $@ );
-    }
-    else {
-        $tlsParams{clientcert} ||= $self->{args}->{ldapClientCert}
-          if $self->{args}->{ldapClientCert};
-        $tlsParams{clientkey} ||= $self->{args}->{ldapClientKey}
-          if $self->{args}->{ldapClientKey};
-    }
+    $tlsParams{verify}     ||= $self->{args}->{ldapVerify} || "require";
+    $tlsParams{clientcert} ||= $self->{args}->{ldapClientCert};
+    $tlsParams{clientkey}  ||= $self->{args}->{ldapClientKey};
 
     # Connect
     my $ldap = Net::LDAP->new(
@@ -201,47 +194,45 @@ sub ldap {
     }
     elsif ( $Net::LDAP::VERSION < '0.64' ) {
 
-        # CentOS7 has a bug in which IO::Socket::SSL will return a broken
-        # socket when certificate validation fails. Net::LDAP does not catch
-        # it, and the process ends up crashing.
+        # Net::LDAP does not catch it, and the process ends up crashing.
         # As a precaution, make sure the underlying socket is doing fine:
-        if (    $ldap->socket->isa('IO::Socket::SSL')
-            and $ldap->socket->errstr )
-        {
-            die "SSL connection error: " . $ldap->socket->errstr;
-        }
+        die "SSL connection error: " . $ldap->socket->errstr
+          if $ldap->socket->errstr;
+    }
+
+    if ( $self->{args}->{ldapIOTimeout} ) {
+        my $socket = $ldap->socket;
+        IO::Socket::Timeout->enable_timeouts_on($socket);
+        $socket->read_timeout( $self->{args}->{ldapIOTimeout} );
+        $socket->write_timeout( $self->{args}->{ldapIOTimeout} );
     }
 
     # Start TLS if needed
-    my $socket = $ldap->socket;
-    IO::Socket::Timeout->enable_timeouts_on($socket);
-    $socket->read_timeout( $self->{args}->{ldapIOTimeout} );
-    $socket->write_timeout( $self->{args}->{ldapIOTimeout} );
-
     if ($useStartTls) {
         my $mesg = $ldap->start_tls(%tlsParams);
         $self->logError($mesg) if $mesg->code;
     }
 
     # Bind with credentials
-    my $bind = $self->_bind( $ldap, $tlsParams{clientcert} );
-    $self->logError($bind) if $bind->code; 
+    my $bind = $self->_bind( $ldap, %tlsParams );
+    $self->logError($bind) if $bind->code;
 
     $self->{ldap} = $ldap;
     return $ldap;
 }
 
 sub _bind {
-    my ( $self, $ldap, $sasl ) = @_;
+    my ( $self, $ldap, %tlsParams ) = @_;
 
     if ( $self->{args}->{ldapBindDN} && $self->{args}->{ldapBindPassword} ) {
         return $ldap->bind( $self->{args}->{ldapBindDN},
             password => $self->{args}->{ldapBindPassword} );
     }
-    elsif ($self->{args}->{ldapClientCert}
-        && $self->{args}->{ldapClientKey}
-        && $sasl )
-    {
+    elsif ( $tlsParams{clientcert} && $tlsParams{clientkey} ) {
+        eval { require Authen::SASL; };
+        if ($@) {
+            die( 'Authen::SASL is required for EXTERNAL binding: ' . $@ );
+        }
         my $sasl = Authen::SASL->new(
             mechanism => 'EXTERNAL',
             callback  => { user => '' }

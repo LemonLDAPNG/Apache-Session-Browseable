@@ -12,10 +12,12 @@ Module::Build->new(
         'Crypt::URandom'  => 0,
     },
     recommends => {
-        'DBI'            => 0,
-        'Net::LDAP'      => 0.38,
-        'DBD::Cassandra' => 0,
-        'Redis::Fast'    => 0,
+        'DBI'                 => 0,
+        'Net::LDAP'           => 0.38,
+        'IO::Socket::Timeout' => 0,
+        'Authen::SASL'        => 0,
+        'DBD::Cassandra'      => 0,
+        'Redis::Fast'         => 0,
     },
     test_requires => {
         DBI           => 0,
