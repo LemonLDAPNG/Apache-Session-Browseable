@@ -2,7 +2,6 @@ package Apache::Session::Browseable::Store::LDAP;
 
 use strict;
 use Net::LDAP;
-use IO::Socket::Timeout;
 
 our $VERSION = '1.4.0';
 
@@ -194,13 +193,28 @@ sub ldap {
     }
     elsif ( $Net::LDAP::VERSION < '0.64' ) {
 
-        # Net::LDAP does not catch it, and the process ends up crashing.
+        # CentOS7 has a bug in which IO::Socket::SSL will return a broken
+        # socket when certificate validation fails. Net::LDAP does not catch
+        # it, and the process ends up crashing.
         # As a precaution, make sure the underlying socket is doing fine:
-        die "SSL connection error: " . $ldap->socket->errstr
-          if $ldap->socket->errstr;
+
+        #
+        # Note: IO::Socket::SSL may retain a stale or unrelated error message
+        # (for example, "SSL wants a read first"), which can cause this check
+        # to fail even when the socket is healthy. This workaround is only
+        # required for older Net::LDAP versions (< 0.64).
+        if (    $ldap->socket->isa('IO::Socket::SSL')
+            and $ldap->socket->errstr )
+        {
+            die "SSL connection error: " . $ldap->socket->errstr;
+        }
     }
 
     if ( $self->{args}->{ldapIOTimeout} ) {
+        eval { require IO::Socket::Timeout; };
+        if ($@) {
+            die( 'IO::Socket::Timeout is required for IOTimeout: ' . $@ );
+        }
         my $socket = $ldap->socket;
         IO::Socket::Timeout->enable_timeouts_on($socket);
         $socket->read_timeout( $self->{args}->{ldapIOTimeout} );
