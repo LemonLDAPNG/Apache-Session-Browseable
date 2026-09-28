@@ -3,7 +3,7 @@ package Apache::Session::Browseable::Store::LDAP;
 use strict;
 use Net::LDAP;
 
-our $VERSION = '1.3.8';
+our $VERSION = '1.3.9';
 
 sub new {
     my $class = shift;
@@ -136,36 +136,51 @@ sub remove {
 
 sub ldap {
     my $self = shift;
-    return $self->{ldap} if ( $self->{ldap} );
+    return $self->{ldap} if $self->{ldap};
 
     # Parse servers configuration
-    my $useTls = 0;
-    my $tlsParam;
-    my @servers = ();
+    my ( @servers, %tlsParams, $useStartTls );
+
     foreach my $server ( split /[\s,]+/, $self->{args}->{ldapServer} ) {
         if ( $server =~ m{^ldap\+tls://([^/]+)/?\??(.*)$} ) {
-            $useTls   = 1;
-            $server   = $1;
-            $tlsParam = $2 || "";
+            $useStartTls = 1;
+            $server      = $1;
+            %tlsParams   = split( /[&=]/, $2 || "" );
+        }
+        elsif ( $server =~ m{^(ldaps://[^/]+)/?\??(.*)$} ) {
+            $useStartTls = 0;
+            $server      = $1;
+            %tlsParams   = split( /[&=]/, $2 || "" );
         }
         else {
-            $useTls = 0;
+            $useStartTls = 0;
         }
         push @servers, $server;
     }
 
     # Compatibility
-    my $caFile = $self->{args}->{ldapCAFile} || $self->{args}->{caFile};
-    my $caPath = $self->{args}->{ldapCAPath} || $self->{args}->{caPath};
+    $tlsParams{cafile} ||=
+      $self->{args}->{ldapCAFile} || $self->{args}->{caFile};
+    $tlsParams{capath} ||=
+      $self->{args}->{ldapCAPath} || $self->{args}->{caPath};
+    $tlsParams{verify} ||= $self->{args}->{ldapVerify} || "require";
+    eval { require Authen::SASL if $self->{args}->{ldapClientCert}; };
+    if ($@) {
+        die( 'Authen::SASL is required to connect using mTLS: ' . $@ );
+    }
+    else {
+        $tlsParams{clientcert} ||= $self->{args}->{ldapClientCert}
+          if $self->{args}->{ldapClientCert};
+        $tlsParams{clientkey} ||= $self->{args}->{ldapClientKey}
+          if $self->{args}->{ldapClientKey};
+    }
 
     # Connect
     my $ldap = Net::LDAP->new(
         \@servers,
-        onerror => undef,
-        verify  => $self->{args}->{ldapVerify} || "require",
-        ( $caFile ? ( cafile => $caFile ) : () ),
-        ( $caPath ? ( capath => $caPath ) : () ),
-
+        onerror   => undef,
+        keepalive => 1,
+        %tlsParams,
         (
             $self->{args}->{ldapRaw} ? ( raw => $self->{args}->{ldapRaw} )
             : ()
@@ -178,46 +193,64 @@ sub ldap {
             $self->{args}->{ldapTimeout}
             ? ( timeout => $self->{args}->{ldapTimeout} )
             : ()
-        ),
-    ) or die( 'Unable to connect to ' . join( ' ', @servers ) . ": " . $@ );
+        )
+    );
 
-    # Check SSL error for old Net::LDAP versions
-    if ( $Net::LDAP::VERSION < '0.64' ) {
+    unless ($ldap) {
+        die( 'Unable to connect to ' . join( ' ', @servers ) . ": " . $@ );
+    }
+    elsif ( $Net::LDAP::VERSION < '0.64' ) {
 
         # CentOS7 has a bug in which IO::Socket::SSL will return a broken
         # socket when certificate validation fails. Net::LDAP does not catch
         # it, and the process ends up crashing.
         # As a precaution, make sure the underlying socket is doing fine:
         if (    $ldap->socket->isa('IO::Socket::SSL')
-            and $ldap->socket->errstr < 0 )
+            and $ldap->socket->errstr )
         {
-            die( "SSL connection error: " . $ldap->socket->errstr );
+            die "SSL connection error: " . $ldap->socket->errstr;
         }
     }
 
     # Start TLS if needed
-    if ($useTls) {
-        my %h = split( /[&=]/, $tlsParam );
-        $h{verify} ||= ( $self->{args}->{ldapVerify} || "require" );
-        $h{cafile} ||= $caFile if ($caFile);
-        $h{capath} ||= $caPath if ($caPath);
-        my $start_tls = $ldap->start_tls(%h);
-        if ( $start_tls->code ) {
-            $self->logError($start_tls);
-            return;
-        }
+    my $socket = $ldap->socket;
+    IO::Socket::Timeout->enable_timeouts_on($socket);
+    $socket->read_timeout( $self->{args}->{ldapIOTimeout} );
+    $socket->write_timeout( $self->{args}->{ldapIOTimeout} );
+
+    if ($useStartTls) {
+        my $mesg = $ldap->start_tls(%tlsParams);
+        $self->logError($mesg) if $mesg->code;
     }
 
     # Bind with credentials
-    my $bind = $ldap->bind( $self->{args}->{ldapBindDN},
-        password => $self->{args}->{ldapBindPassword} );
-    if ( $bind->code ) {
-        $self->logError($bind);
-        return;
-    }
+    my $bind = $self->_bind( $ldap, $tlsParams{clientcert} );
+    $self->logError($bind) if $bind->code; 
 
     $self->{ldap} = $ldap;
     return $ldap;
+}
+
+sub _bind {
+    my ( $self, $ldap, $sasl ) = @_;
+
+    if ( $self->{args}->{ldapBindDN} && $self->{args}->{ldapBindPassword} ) {
+        return $ldap->bind( $self->{args}->{ldapBindDN},
+            password => $self->{args}->{ldapBindPassword} );
+    }
+    elsif ($self->{args}->{ldapClientCert}
+        && $self->{args}->{ldapClientKey}
+        && $sasl )
+    {
+        my $sasl = Authen::SASL->new(
+            mechanism => 'EXTERNAL',
+            callback  => { user => '' }
+        );
+        return $ldap->bind( undef, sasl => $sasl );
+    }
+    else {
+        return $ldap->bind();
+    }
 }
 
 sub logError {
