@@ -21,13 +21,43 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sessions
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: sessions
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - name: Install Perl dependencies
-        run: sudo apt install libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl liblwp-protocol-psgi-perl
+        run: sudo apt install libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl libdbd-pg-perl liblwp-protocol-psgi-perl
       - name: Build and run tests
         env:
           REDIS_URL: localhost:6379
+          PG_DSN: dbi:Pg:dbname=sessions;host=127.0.0.1;port=5432
+          PG_USER: postgres
+          PG_PASSWORD: postgres
+          MYSQL_DSN: dbi:mysql:database=sessions;host=127.0.0.1;port=3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: root
         run: |
           perl Build.PL
           ./Build
