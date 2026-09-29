@@ -27,18 +27,22 @@ sub populate {
 
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
-    $selectField =~ s/'/''/g;
-    my $query =
-      { query => qq'a_session->>"\$.$selectField" =?', values => [$value] };
+    my $dbh   = $class->_classDbh($args);
+    my $query = {
+        query  => $class->_sqlField( $dbh, $selectField ) . ' =?',
+        values => [$value]
+    };
     return $class->_query( $args, $query, @fields );
 }
 
 sub searchOnExpr {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
-    $selectField =~ s/'/''/g;
-    $value       =~ s/\*/%/g;
-    my $query =
-      { query => qq'a_session->>"\$.$selectField" like ?', values => [$value] };
+    my $dbh = $class->_classDbh($args);
+    $value =~ s/\*/%/g;
+    my $query = {
+        query  => $class->_sqlField( $dbh, $selectField ) . ' like ?',
+        values => [$value]
+    };
     return $class->_query( $args, $query, @fields );
 }
 
@@ -55,8 +59,10 @@ sub _query {
       || $Apache::Session::Store::DBI::TableName;
 
     my $sth;
-    my $fields =
-      join( ',', 'id', map { s/'//g; qq(a_session->>"\$.$_" AS $_) } @fields );
+    my $fields = join( ',',
+        'id',
+        map { $class->_sqlField( $dbh, $_ ) . ' AS ' . $class->_sqlAlias($_) }
+          @fields );
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
     $sth->execute( @{ $query->{values} } );
@@ -77,14 +83,19 @@ sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
     my ( $query, @bind );
     return 0 unless ( $class->_checkThresholds($rule) );
+    my $dbh = $class->_classDbh($args);
     if ( $rule->{or} ) {
-        $query = join ' OR ',
-          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} }
+        $query = join ' OR ', map {
+            my $f = $class->_sqlField( $dbh, $_ );
+            "cast($f as UNSIGNED) < $rule->{or}->{$_}"
+          }
           keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
-        $query = join ' AND ',
-          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{and}->{$_}} }
+        $query = join ' AND ', map {
+            my $f = $class->_sqlField( $dbh, $_ );
+            "cast($f as UNSIGNED) < $rule->{and}->{$_}"
+          }
           keys %{ $rule->{and} };
     }
     return 0 unless ($query);
@@ -92,13 +103,13 @@ sub deleteIfLowerThan {
         $query = "($query) AND " . join(
             ' AND ',
             map {
+                my $f = $class->_sqlField( $dbh, $_ );
                 push @bind, $rule->{not}->{$_};
-                qq{(a_session->>"\$.$_" IS NULL OR a_session->>"\$.$_" <> ?)}
+                "($f IS NULL OR $f <> ?)"
               }
               keys %{ $rule->{not} }
         );
     }
-    my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
     my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
@@ -125,7 +136,8 @@ sub get_key_from_all_sessions {
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
         my $fields = join ',',
-          map { s/'//g; qq{a_session->>"\$.$_" AS $_} } @$data;
+          map { $class->_sqlField( $dbh, $_ ) . ' AS ' . $class->_sqlAlias($_) }
+          @$data;
         $sth = $dbh->prepare("SELECT $fields from $table_name");
         $sth->execute;
         return $sth->fetchall_hashref('id');
@@ -157,6 +169,28 @@ sub get_key_from_all_sessions {
         }
     }
     return \%res;
+}
+
+# Build SQL expression to get a field from a_session. Field name is used as
+# JSON path member, quoted if needed
+sub _sqlField {
+    my ( $class, $dbh, $field ) = @_;
+    my $path;
+    if ( $field =~ /^[A-Za-z_][A-Za-z0-9_]*\z/ ) {
+        $path = "\$.$field";
+    }
+    else {
+        ( my $f = $field ) =~ s/(["\\])/\\$1/g;
+        $path = qq{\$."$f"};
+    }
+    return 'a_session->>' . $dbh->quote($path);
+}
+
+# Build a column alias that preserves field name case
+sub _sqlAlias {
+    my ( $class, $field ) = @_;
+    $field =~ s/`/``/g;
+    return "`$field`";
 }
 
 sub _classDbh {
