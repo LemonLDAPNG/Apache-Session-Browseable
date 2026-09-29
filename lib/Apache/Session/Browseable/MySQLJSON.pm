@@ -241,21 +241,44 @@ Apache::Session::MySQL
 
 =head1 SYNOPSIS
 
-Create table with columns for indexed fields. Example for Lemonldap::NG with
-optional virtual tables and indexes:
+Create table. Example for Lemonldap::NG with optional generated columns and
+indexes:
 
   CREATE TABLE sessions (
       id varchar(64) not null primary key,
       a_session json,
-      as_wt varchar(32) AS (a_session->"$._whatToTrace") VIRTUAL,
-      as_sk varchar(12) AS (a_session->"$._session_kind") VIRTUAL,
-      as_ut bigint AS (a_session->"$._utime") VIRTUAL,
-      as_ip varchar(40) AS (a_session->"$.ipAddr") VIRTUAL,
+      as_wt varchar(255) AS (a_session->>'$._whatToTrace') VIRTUAL,
+      as_sk varchar(32) AS (a_session->>'$._session_kind') VIRTUAL,
+      as_ut bigint unsigned
+          AS (cast(a_session->>'$._utime' as unsigned)) VIRTUAL,
+      as_ip varchar(64) AS (a_session->>'$.ipAddr') VIRTUAL,
       KEY as_wt (as_wt),
       KEY as_sk (as_sk),
       KEY as_ut (as_ut),
       KEY as_ip (as_ip)
   ) ENGINE=InnoDB;
+
+MySQL uses the index of a generated column only when the query contains the
+same expression, so keep these expressions exactly as written: they are the
+ones used by this module (C<-E<gt>E<gt>> returns unquoted values whereas
+C<-E<gt>> keeps JSON quotes). MySQL doesn't use them for C<LIKE> queries, so
+searchOnExpr() always scans the table. With strict SQL mode, a value longer
+than its generated column makes the session storage fail: size them
+accordingly.
+
+Generated columns documented by previous versions (using C<-E<gt>>) were
+never used. To fix an existing table, re-create them:
+
+  ALTER TABLE sessions DROP COLUMN as_wt, DROP COLUMN as_sk,
+      DROP COLUMN as_ut, DROP COLUMN as_ip;
+  ALTER TABLE sessions
+      ADD COLUMN as_wt varchar(255) AS (a_session->>'$._whatToTrace') VIRTUAL,
+      ADD COLUMN as_sk varchar(32) AS (a_session->>'$._session_kind') VIRTUAL,
+      ADD COLUMN as_ut bigint unsigned
+          AS (cast(a_session->>'$._utime' as unsigned)) VIRTUAL,
+      ADD COLUMN as_ip varchar(64) AS (a_session->>'$.ipAddr') VIRTUAL,
+      ADD KEY as_wt (as_wt), ADD KEY as_sk (as_sk),
+      ADD KEY as_ut (as_ut), ADD KEY as_ip (as_ip);
 
 Use it with Perl:
 
@@ -265,13 +288,10 @@ Use it with Perl:
        DataSource => 'dbi:mysql:sessions',
        UserName   => $db_user,
        Password   => $db_pass,
-       LockDataSource => 'dbi:mysql:sessions',
-       LockUserName   => $db_user,
-       LockPassword   => $db_pass,
-
-       # Choose your browseable fileds
-       Index          => 'uid mail',
   };
+
+Don't set C<Index>: any field can be searched and the store would try to
+write indexed fields into columns of the same name.
 
 Use it like L<Apache::Session::Browseable::MySQL>
 

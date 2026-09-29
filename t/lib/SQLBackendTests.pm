@@ -13,7 +13,8 @@ package SQLBackendTests;
 #  - null:    1 if a field can be stored as JSON null (JSON backends)
 #  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - corrupt: a_session value that can't be unserialized
-#  - explain: sub returning a list of [ description, WHERE clause, index ]:
+#  - explain: sub( $class, $dbh ) returning a list of
+#             [ description, WHERE clause, index ]:
 #             the plan of each WHERE clause must use the index
 #
 # ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
@@ -446,7 +447,7 @@ sub run_tests {
     if ( $o{explain} ) {
         $reset->();
         $dbh->do('SET enable_seqscan = off') if ( $o{driver} eq 'Pg' );
-        foreach ( $o{explain}->($class) ) {
+        foreach ( $o{explain}->( $class, $dbh ) ) {
             my ( $desc, $where, $index ) = @$_;
             $index =~ s/__TABLE__/$table/g;
             my $sth =
