@@ -263,6 +263,30 @@ sub run_tests {
         }
     );
 
+    # get_key_from_all_sessions reads sessions by batches
+    {
+        local $Apache::Session::Browseable::_common::BatchSize = 2;
+        my $queries = 0;
+        my $cdbh    = $class->_classDbh($args);
+        local $cdbh->{Callbacks} =
+          { ChildCallbacks => { execute => sub { $queries++; return } } };
+        foreach my $n ( 4, 5 ) {
+            $newSession->( uid => 'extra' ) if ( $n == 5 );
+            $queries = 0;
+            my $calls = 0;
+            my $res   = $class->get_key_from_all_sessions( $args,
+                sub { $calls++; $_[1] } );
+            is( $calls, $n,
+                "$n sessions by batches: callback called for each" );
+            is( scalar( keys %$res ),
+                $n, "$n sessions by batches: all returned" );
+            is( $queries, 3, "$n sessions by batches: 3 queries" );
+        }
+        my $res = $class->get_key_from_all_sessions($args);
+        is( scalar( keys %$res ), 5, 'Sessions by batches without callback' );
+        $reset->();
+    }
+
     # deleteIfLowerThan
     $group->(
         delete => sub {

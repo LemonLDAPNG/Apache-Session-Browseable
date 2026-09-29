@@ -138,24 +138,27 @@ sub get_key_from_all_sessions {
         $sth->execute;
         return $sth->fetchall_hashref('id');
     }
-    $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
-    $sth->execute;
     my %res;
     my $sub = Apache::Session::Browseable::_common::_unserializer($class);
-    while ( my @row = $sth->fetchrow_array ) {
-        my $tmp = &$sub( { serialized => $row[1] } );
-        if ( ref($data) eq 'CODE' ) {
-            $tmp = &$data( $tmp, $row[0] );
-            $res{ $row[0] } = $tmp if ( defined($tmp) );
+    Apache::Session::Browseable::_common->_forEachSession(
+        $dbh,
+        $table_name,
+        sub {
+            my @row = @_;
+            my $tmp = &$sub( { serialized => $row[1] } );
+            if ( ref($data) eq 'CODE' ) {
+                $tmp = &$data( $tmp, $row[0] );
+                $res{ $row[0] } = $tmp if ( defined($tmp) );
+            }
+            elsif ($data) {
+                $data = [$data] unless ( ref($data) );
+                $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
+            }
+            else {
+                $res{ $row[0] } = $tmp;
+            }
         }
-        elsif ($data) {
-            $data = [$data] unless ( ref($data) );
-            $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
-        }
-        else {
-            $res{ $row[0] } = $tmp;
-        }
-    }
+    );
     return \%res;
 }
 
