@@ -26,13 +26,9 @@ sub update {
     my $self    = shift;
     my $session = shift;
 
-    if ( $self->{opened} ) {
-        truncate( $self->{fh}, 0 ) || die "Could not truncate file: $!";
-        seek( $self->{fh}, 0, 0 );
-    }
-    else {
-        $self->_open($session);
-    }
+    $self->_open($session) unless ( $self->{opened} );
+    truncate( $self->{fh}, 0 ) || die "Could not truncate file: $!";
+    seek( $self->{fh}, 0, 0 );
     $self->_write($session);
 }
 
