@@ -27,9 +27,9 @@ sub populate {
 
 # No CAST (default in DBI.pm): MySQL converts values implicitly and a CAST
 # prevents the use of an index on the field
-sub _buildLowerThanExpression {
-    my ( $class, $field, $value ) = @_;
-    return "$field < $value";
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value ) = @_;
+    return "$field $op $value";
 }
 
 1;

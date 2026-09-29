@@ -68,10 +68,18 @@ my @tests = (
 foreach (@tests) {
     my ( $backend, $field, $expected, $args ) = @$_;
     my $class = "Apache::Session::Browseable::$backend";
+    my $desc  = "$backend: $field" . ( $args ? ' (indexed)' : '' );
   SKIP: {
-        skip "$class can't be loaded", 1 unless ( eval "require $class" );
+        skip "$class can't be loaded", 3 unless ( eval "require $class" );
         is( $class->_buildLowerThanExpression( $field, 200, $dbh, $args ),
-            $expected, "$backend: $field" . ( $args ? ' (indexed)' : '' ) );
+            $expected, $desc );
+
+        # Same expressions with both comparison operators
+        is( $class->_buildCompareExpression( $field, '<', 200, $dbh, $args ),
+            $expected, "$desc: <" );
+        ( my $gt = $expected ) =~ s/ < / > /;
+        is( $class->_buildCompareExpression( $field, '>', 200, $dbh, $args ),
+            $gt, "$desc: >" );
     }
 }
 

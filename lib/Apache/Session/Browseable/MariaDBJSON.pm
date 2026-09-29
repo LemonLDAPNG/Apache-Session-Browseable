@@ -129,11 +129,11 @@ sub _checkIndex {
 }
 
 # No CAST for indexed fields: it would prevent the use of the index
-sub _buildLowerThanExpression {
-    my ( $class, $field, $value, $dbh, $args ) = @_;
-    return $class->_sqlField( $dbh, $field, $args ) . " < $value"
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value, $dbh, $args ) = @_;
+    return $class->_sqlField( $dbh, $field, $args ) . " $op $value"
       if ( $class->_useColumn( $dbh, $field, $args ) );
-    return $class->SUPER::_buildLowerThanExpression( $field, $value, $dbh );
+    return $class->SUPER::_buildCompareExpression( $field, $op, $value, $dbh );
 }
 
 1;

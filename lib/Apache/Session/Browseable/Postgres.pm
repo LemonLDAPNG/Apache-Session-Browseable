@@ -62,9 +62,9 @@ sub searchOnExpr {
 
 # Cast to bigint instead of integer: PostgreSQL drops this cast on a bigint
 # column, so its index can be used
-sub _buildLowerThanExpression {
-    my ( $class, $field, $value ) = @_;
-    return "cast($field as bigint) < $value";
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value ) = @_;
+    return "cast($field as bigint) $op $value";
 }
 
 1;

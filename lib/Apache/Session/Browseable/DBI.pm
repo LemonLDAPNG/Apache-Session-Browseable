@@ -140,10 +140,16 @@ sub deleteIfLowerThan {
     }
 }
 
-# Let specialized modules override this syntax if they need to
 sub _buildLowerThanExpression {
-    my ( $class, $field, $value ) = @_;
-    return "cast($field as integer) < $value";
+    my ( $class, $field, $value, @args ) = @_;
+    return $class->_buildCompareExpression( $field, '<', $value, @args );
+}
+
+# Let specialized modules override this syntax if they need to. $op is "<" or
+# ">", $value a number checked by the caller
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value ) = @_;
+    return "cast($field as integer) $op $value";
 }
 
 sub get_key_from_all_sessions {

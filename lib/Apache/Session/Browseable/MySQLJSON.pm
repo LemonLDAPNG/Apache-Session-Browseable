@@ -182,10 +182,10 @@ sub get_key_from_all_sessions {
 # JSON path) and connection arguments. The handle is optional: without one,
 # _sqlPath() quotes the path. The expression must match the documented
 # generated columns
-sub _buildLowerThanExpression {
-    my ( $class, $field, $value, $dbh, $args ) = @_;
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value, $dbh, $args ) = @_;
     my $f = $class->_sqlField( $dbh, $field, $args );
-    return "cast($f as UNSIGNED) < $value";
+    return "cast($f as UNSIGNED) $op $value";
 }
 
 # Build SQL expression to get a field from a_session ($args: connection

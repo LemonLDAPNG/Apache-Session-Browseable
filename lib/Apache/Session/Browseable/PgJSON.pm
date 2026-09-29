@@ -167,11 +167,17 @@ sub get_key_from_all_sessions {
     return \%res;
 }
 
-# Must match the documented expression indexes (_utime, _lastSeen)
 sub _buildLowerThanExpression {
     my ( $class, $field, $value ) = @_;
+    return $class->_buildCompareExpression( $field, '<', $value );
+}
+
+# Must match the documented expression indexes (_utime, _lastSeen). $op is
+# "<" or ">", $value a number checked by the caller
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value ) = @_;
     my $f = $class->_sqlField($field);
-    return "cast($f as bigint) < $value";
+    return "cast($f as bigint) $op $value";
 }
 
 # Build SQL expression to get a field from a_session
