@@ -72,4 +72,17 @@ foreach (@tests) {
     }
 }
 
+# _utf8() must convert both UTF-8 and Latin-1 byte strings (searched values or
+# field names read without decoding) to the same character
+foreach my $backend (qw(MySQLJSON MariaDBJSON)) {
+    my $class = "Apache::Session::Browseable::$backend";
+  SKIP: {
+        skip "$class can't be loaded", 2 unless ( eval "require $class" );
+        my ($utf8)   = $class->_utf8("\xc3\xa9");
+        my ($latin1) = $class->_utf8("\xe9");
+        is( $utf8,   "\x{e9}", "$backend: _utf8 decodes UTF-8 bytes" );
+        is( $latin1, "\x{e9}", "$backend: _utf8 keeps Latin-1 bytes" );
+    }
+}
+
 done_testing();

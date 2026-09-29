@@ -2,6 +2,7 @@ package Apache::Session::Browseable::MySQLJSON;
 
 use strict;
 
+use Encode;
 use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::MySQL;
@@ -217,10 +218,25 @@ sub _sqlPath {
 }
 
 # DBD::mysql sends strings as stored by Perl: store them in UTF-8 so that
-# characters U+0080 to U+00FF are not sent in Latin-1
+# characters U+0080 to U+00FF are not sent in Latin-1. A non flagged string
+# containing bytes >= 0x80 may be UTF-8 or Latin-1 encoded: try UTF-8 first
+# (strictly), and fall back to Latin-1 (utf8::upgrade) only if it is not
+# valid UTF-8
 sub _utf8 {
     my $class = shift;
-    return map { my $s = $_; utf8::upgrade($s); $s } @_;
+    return map {
+        my $s = $_;
+        if (   defined($s)
+            and !utf8::is_utf8($s)
+            and $s =~ /[\x80-\xff]/ )
+        {
+            my $decoded =
+              eval { Encode::decode( 'UTF-8', $s, Encode::FB_CROAK ) };
+            if ( defined($decoded) ) { $s = $decoded }
+            else                     { utf8::upgrade($s) }
+        }
+        $s
+    } @_;
 }
 
 # Build the SELECT list for the given fields. Column aliases are generated
