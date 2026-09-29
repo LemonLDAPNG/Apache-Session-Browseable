@@ -13,6 +13,11 @@ package SQLBackendTests;
 #  - null:    1 if a field can be stored as JSON null (JSON backends)
 #  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - corrupt: a_session value that can't be unserialized
+#  - explain: sub returning a list of [ description, WHERE clause, index ]:
+#             the plan of each WHERE clause must use the index
+#
+# ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
+# of table names.
 
 use strict;
 use warnings;
@@ -25,6 +30,8 @@ sub run_tests {
     my %o = @_;
     my ( $class, $table ) = @o{qw(class table)};
     my $dsn = $ENV{"$o{env}_DSN"};
+    $table =~ s/^asb_test_/$ENV{ASB_TEST_TABLE_PREFIX}/
+      if $ENV{ASB_TEST_TABLE_PREFIX};
 
     plan skip_all => "DBD::$o{driver} is needed for this test"
       unless eval "require DBI; require DBD::$o{driver}; 1";
@@ -409,6 +416,35 @@ sub run_tests {
         $mdbh->do('SET standard_conforming_strings = on');
         is( $mdbh->selectrow_array('SHOW standard_conforming_strings'),
             'on', 'standard_conforming_strings is back on' );
+    }
+
+    # Queries must be able to use indexes
+    if ( $o{explain} ) {
+        $reset->();
+        $dbh->do('SET enable_seqscan = off') if ( $o{driver} eq 'Pg' );
+        foreach ( $o{explain}->($class) ) {
+            my ( $desc, $where, $index ) = @$_;
+            $index =~ s/__TABLE__/$table/g;
+            my $sth =
+              $dbh->prepare("EXPLAIN SELECT id FROM $table WHERE $where");
+            $sth->execute;
+            if ( $o{driver} eq 'Pg' ) {
+                my $plan = join "\n",
+                  map { $_->[0] } @{ $sth->fetchall_arrayref };
+                ok( $plan =~ /\b\Q$index\E\b/ && $plan =~ /Index Cond/,
+                    "$desc uses index $index" )
+                  or diag "$where:\n$plan";
+            }
+            else {
+                my $row  = $sth->fetchrow_hashref('NAME_lc');
+                my $keys = $row->{possible_keys} // '';
+                ok( ( grep { $_ eq $index } split /,/, $keys ),
+                    "$desc can use index $index" )
+                  or diag "$where: possible_keys=$keys";
+                $sth->finish;
+            }
+        }
+        $dbh->do('RESET enable_seqscan') if ( $o{driver} eq 'Pg' );
     }
 
     # Corrupted session must not break listing

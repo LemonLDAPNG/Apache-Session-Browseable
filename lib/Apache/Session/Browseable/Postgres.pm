@@ -66,6 +66,13 @@ sub get_key_from_all_sessions {
     return $res;
 }
 
+# Cast to bigint instead of integer: PostgreSQL drops this cast on a bigint
+# column, so its index can be used
+sub _buildLowerThanExpression {
+    my ( $class, $field, $value ) = @_;
+    return "cast($field as bigint) < $value";
+}
+
 1;
 __END__
 
