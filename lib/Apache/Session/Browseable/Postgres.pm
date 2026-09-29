@@ -96,10 +96,19 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
 
 Add indexes:
 
-  CREATE INDEX uid1 ON sessions USING BTREE (_whatToTrace);
+  CREATE INDEX uid1 ON sessions USING BTREE (_whatToTrace text_pattern_ops);
   CREATE INDEX s1   ON sessions (_session_kind);
   CREATE INDEX u1   ON sessions (_utime);
-  CREATE INDEX ip1  ON sessions USING BTREE (ipAddr);
+  CREATE INDEX ip1  ON sessions USING BTREE (ipAddr varchar_pattern_ops);
+
+searchOnExpr() uses C<LIKE 'prefix%'> queries: unless the database uses the
+"C" collation, PostgreSQL can't use a plain btree index for them. The
+C<text_pattern_ops> and C<varchar_pattern_ops> operator classes let the same
+index serve both C<=> and prefix C<LIKE> searches. Note that a search starting
+with a C<*> wildcard can never use a btree index.
+
+C<_utime> must be a C<bigint> column, else deleteIfLowerThan() can't use its
+index.
 
 Use it with Perl:
 
@@ -112,7 +121,7 @@ Use it with Perl:
        Commit     => 1,
 
        # Choose your browseable fileds
-       Index      => '_whatToTrace _session_kind _utime iAddr',
+       Index      => '_whatToTrace _session_kind _utime ipAddr',
   };
   
   # Use it like Apache::Session

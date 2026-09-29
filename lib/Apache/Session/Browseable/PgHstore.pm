@@ -225,15 +225,23 @@ Create table:
 
   CREATE UNLOGGED TABLE sessions (
       id varchar(64) not null primary key,
-      a_session hstore,
+      a_session hstore
   );
 
 Optionally, add indexes on some fields. Example for Lemonldap::NG:
 
-  CREATE INDEX uid1 ON sessions USING BTREE ( (a_session -> '_whatToTrace') );
+  CREATE INDEX uid1 ON sessions USING BTREE
+    ( (a_session -> '_whatToTrace') text_pattern_ops );
   CREATE INDEX  s1  ON sessions ( (a_session -> '_session_kind') );
   CREATE INDEX  u1  ON sessions ( ( cast(a_session -> '_utime' AS bigint) ) );
-  CREATE INDEX ip1  ON sessions USING BTREE ( (a_session -> 'ipAddr') );
+  CREATE INDEX ip1  ON sessions USING BTREE
+    ( (a_session -> 'ipAddr') text_pattern_ops );
+
+searchOnExpr() uses C<LIKE 'prefix%'> queries: unless the database uses the
+"C" collation, PostgreSQL can't use a plain btree index for them. The
+C<text_pattern_ops> operator class lets the same index serve both C<=> and
+prefix C<LIKE> searches. Note that a search starting with a C<*> wildcard can
+never use a btree index.
 
 Use it like L<Apache::Session::Browseable::Postgres> except that you don't
 need to declare indexes
