@@ -23,7 +23,7 @@
          "recommends" : {
             "DBD::Cassandra" : "0",
             "DBI" : "0",
-            "Net::LDAP" : "0.38",
+            "Net::LDAP" : "0.44",
             "Redis::Fast" : "0"
          },
          "requires" : {
