@@ -1,7 +1,6 @@
 package Apache::Session::Browseable::Store::Redis;
 
 use strict;
-use JSON qw(decode_json);
 
 our $VERSION = '1.3.18';
 
@@ -62,11 +61,16 @@ sub update {
     if ($@) {
         warn "Failed to read previous session '$id' from Redis: $@";
     }
+    # Decode it like the session itself: Redis returns Latin-1, not UTF-8
     my $old_data;
     if ( defined $old_raw && length $old_raw ) {
-        $old_data = eval { decode_json($old_raw) };
+        my $old = { serialized => $old_raw };
+        eval { $session->{unserialize}->($old) };
         if ($@) {
             warn "Failed to decode previous session '$id': $@";
+        }
+        else {
+            $old_data = $old->{data};
         }
     }
 

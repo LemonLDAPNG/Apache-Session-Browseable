@@ -82,20 +82,45 @@ SKIP: {
 # Redis can't store characters above U+00FF. It stores Latin-1, so
 # "\x{c3}\x{a9}" is stored as valid UTF-8: it must not be read as "\x{e9}"
 SKIP: {
-    skip 'Set REDIS_URL to run Redis tests', 14 unless $ENV{REDIS_URL};
-    skip 'Redis module is needed', 14
+    skip 'Set REDIS_URL to run Redis tests', 23 unless $ENV{REDIS_URL};
+    skip 'Redis module is needed', 23
       unless eval { require Apache::Session::Browseable::Redis; 1 };
-    roundTrip(
-        'Redis',
-        'Apache::Session::Browseable::Redis',
-        {
-            server   => $ENV{REDIS_URL},
-            database => $ENV{REDIS_DBNUM} || 15,
-            Index    => 'uid'
-        },
-        $latin,
-        "\x{c3}\x{a9}"
-    );
+    my $class = 'Apache::Session::Browseable::Redis';
+    my $args  = {
+        server   => $ENV{REDIS_URL},
+        database => $ENV{REDIS_DBNUM} || 15,
+        Index    => 'uid'
+    };
+    roundTrip( 'Redis', $class, $args, $latin, "\x{c3}\x{a9}" );
+
+    # Index entry of the previous value must be removed on update
+    my $redis = $class->_getRedis($args);
+    foreach my $t (
+        [ "m\x{e9}", 'toto' ],
+        [ 'dwho',    'rtyler' ],
+        [ 'dwho',    'rtyler', cn => $latin ],
+      )
+    {
+        my ( $old, $new, %data ) = @$t;
+        ( my $l = "$old -> $new" ) =~ s/[^ -~]/?/g;
+        $l .= ' with non-ASCII data' if (%data);
+        my @warn;
+        local $SIG{__WARN__} = sub { push @warn, @_ };
+        my %session;
+        tie %session, $class, undef, $args;
+        $session{uid} = $old;
+        $session{$_} = $data{$_} foreach ( keys %data );
+        my $id = $session{_session_id};
+        untie %session;
+        tie %session, $class, $id, $args;
+        $session{uid} = $new;
+        untie %session;
+        ok( !$redis->sismember( "uid_$old", $id ), "Index $l: old removed" );
+        ok( $redis->sismember( "uid_$new",  $id ), "Index $l: new added" );
+        is_deeply( \@warn, [], "Index $l: no warning" );
+        tie %session, $class, $id, $args;
+        tied(%session)->delete;
+    }
 }
 
 done_testing();
