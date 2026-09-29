@@ -13,6 +13,20 @@ use Test::More;
         $s =~ s/'/''/g;
         return "'$s'";
     }
+
+    # MariaDBJSON checks that Index columns are generated from a_session: all
+    # the tested ones are
+    sub prepare { return bless {}, 'FakeSth' }
+
+    package FakeSth;
+    sub execute { return 1 }
+    sub fetchall_arrayref {
+        return [
+            [ '_utime',    "JSON_VALUE(a_session, '\$._utime')" ],
+            [ '_lastSeen', "JSON_VALUE(a_session, '\$._lastSeen')" ],
+        ];
+    }
+    sub finish { return 1 }
 }
 my $dbh = FakeDbh->new;
 

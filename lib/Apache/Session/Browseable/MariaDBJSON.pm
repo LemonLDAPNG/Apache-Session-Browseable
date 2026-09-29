@@ -31,11 +31,53 @@ sub populate {
 sub _sqlField {
     my ( $class, $dbh, $field, $args ) = @_;
     if ( $args and $class->_fieldIsIndexed( $args, $field ) ) {
+        $class->_checkIndex( $dbh, $args );
         my ($f) = $class->_utf8($field);
         $f =~ s/`/``/g;
         return "`$f`";
     }
     return 'JSON_VALUE(a_session, ' . $class->_sqlPath( $dbh, $field ) . ')';
+}
+
+# Indexed fields are read from a generated column: a column that exists but
+# is not generated (for example left over from a migration from
+# Browseable::MySQL, where the store wrote real columns) stays NULL, so
+# searches and purge silently return nothing. Check it once per handle and
+# table
+sub _checkIndex {
+    my ( $class, $dbh, $args ) = @_;
+    my $index =
+      ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
+    return unless (@$index);
+
+    my $table = $args->{TableName} || $Apache::Session::Store::DBI::TableName;
+    my $checked = $dbh->{asb_mariadbjson_index} ||= {};
+    return if ( $checked->{$table} );
+
+    my $sth = $dbh->prepare(
+        'SELECT COLUMN_NAME, GENERATION_EXPRESSION'
+          . ' FROM information_schema.COLUMNS'
+          . ' WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?'
+          . ' AND COLUMN_NAME IN ('
+          . join( ',', ('?') x @$index ) . ')' );
+    $sth->execute( $table, @$index );
+    my %expr = map { $_->[0] => $_->[1] } @{ $sth->fetchall_arrayref };
+    $sth->finish;
+
+    foreach my $field (@$index) {
+        next
+          if ( defined( $expr{$field} )
+            and $expr{$field} =~ /\ba_session\b/ );
+        my $why = exists( $expr{$field} )
+          ? 'it exists but is not generated from a_session'
+          : 'there is no column with this name';
+        die "Apache::Session::Browseable::MariaDBJSON: Index field "
+          . "\"$field\" is unusable in table $table: $why. Searches on it"
+          . " would silently return nothing; add a generated column based on"
+          . " a_session (see the documentation)\n";
+    }
+    $checked->{$table} = 1;
+    return;
 }
 
 # No CAST for indexed fields: it would prevent the use of the index
