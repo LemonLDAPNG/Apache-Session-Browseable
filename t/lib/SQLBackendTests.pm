@@ -447,6 +447,10 @@ sub run_tests {
     if ( $o{explain} ) {
         $reset->();
         $dbh->do('SET enable_seqscan = off') if ( $o{driver} eq 'Pg' );
+
+        # MySQL >= 8.3: JSON and TREE formats have no possible_keys column
+        eval { $dbh->do('SET SESSION explain_format=TRADITIONAL') }
+          if ( $o{driver} eq 'mysql' );
         foreach ( $o{explain}->( $class, $dbh ) ) {
             my ( $desc, $where, $index ) = @$_;
             $index =~ s/__TABLE__/$table/g;
