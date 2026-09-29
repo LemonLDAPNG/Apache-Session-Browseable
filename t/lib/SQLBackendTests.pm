@@ -16,6 +16,8 @@ package SQLBackendTests;
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
 #  - utf8:    1 to test non-ASCII field names and values (JSON backends)
+#  - utf8_todo: reason why get_key_from_all_sessions() without fields doesn't
+#               return non-ASCII values yet (marks this test as TODO)
 #  - exact:   1 to check that searches are case and accent sensitive
 #  - explain: sub( $class, $dbh, $args ) returning a list of
 #             [ description, WHERE clause, index or array ref of indexes,
@@ -39,6 +41,10 @@ use Exporter 'import';
 
 our @EXPORT = qw(run_tests);
 our $TODO;
+
+# Diagnostics may contain non-ASCII values
+binmode( Test::More->builder->$_, ':encoding(UTF-8)' )
+  foreach (qw(output failure_output todo_output));
 
 sub run_tests {
     my %o = @_;
@@ -478,14 +484,16 @@ sub run_tests {
                 );
             }
         );
-        $group->(
-            deleteNot => sub {
-                foreach (
-                    [ value        => { _whatToTrace => "\x{c9}lodie" } ],
-                    [ 'field name' => { "cl\x{e9}"   => 'v' } ]
-                  )
-                {
-                    my ( $l, $not ) = @$_;
+        foreach (
+            [ value        => { _whatToTrace => "\x{c9}lodie" }, 'utf8' ],
+            [ 'field name' => { "cl\x{e9}"   => 'v' },           'deleteNot' ]
+          )
+        {
+            my ( $l, $not, $key ) = @$_;
+
+            # Other sessions don't have the field name: they must be deleted
+            $group->(
+                $key => sub {
                     my @r = $class->deleteIfLowerThan( $args,
                         { or => { _utime => 200 }, not => $not } );
                     is_deeply(
@@ -498,15 +506,15 @@ sub run_tests {
                         join( ',', sort 'obrien', $uid ),
 "deleteIfLowerThan \"not\" non-ASCII $l: right sessions kept"
                     );
-                    $reset->();
-                    $uid = $newSession->(
-                        %{ $data{dwho} },
-                        _whatToTrace => "\x{c9}lodie",
-                        "cl\x{e9}"   => 'v',
-                    );
                 }
-            }
-        );
+            );
+            $reset->();
+            $uid = $newSession->(
+                %{ $data{dwho} },
+                _whatToTrace => "\x{c9}lodie",
+                "cl\x{e9}"   => 'v',
+            );
+        }
         $reset->();
     }
 

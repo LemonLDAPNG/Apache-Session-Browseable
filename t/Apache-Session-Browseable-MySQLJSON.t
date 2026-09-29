@@ -26,6 +26,7 @@ run_tests(
     ],
     exact => 1,
     json  => 1,
+    utf8  => 1,
     weird => [ "weird'field", 'a"b\\c', 'a?b', 'x\\' ],
     todo  => {
         searchOnData => 'session data is not decoded',
@@ -34,6 +35,7 @@ run_tests(
         deleteAnd    => '"and" rules are built from the "or" hash',
         deleteNot    => 'sessions without the "not" field are never deleted',
         deleteAndNot => '"and" rules are built from the "or" hash',
+        utf8Read     => 'non-ASCII values are read as bytes (fixed by #54)',
     },
     explain => sub {
         my ($class) = @_;
