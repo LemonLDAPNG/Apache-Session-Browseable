@@ -40,7 +40,8 @@ sub _unserializer {
 # memory. No server-side cursor here: $sub may reuse the database handle.
 sub _forEachSession {
     my ( $class, $dbh, $table_name, $sub ) = @_;
-    my $sql = "SELECT id,a_session FROM $table_name";
+    my $limit = ( $BatchSize // '' ) =~ /^\s*([1-9][0-9]*)\s*\z/ ? $1 : 1000;
+    my $sql   = "SELECT id,a_session FROM $table_name";
     unless ( $dbh->{Driver}->{Name} =~ /^(?:Pg|mysql|MariaDB|SQLite)\z/ ) {
         my $sth = $dbh->prepare_cached($sql);
         $sth->execute;
@@ -49,17 +50,21 @@ sub _forEachSession {
         }
         return;
     }
+
+    # Not a single snapshot: rows inserted during the iteration with an id
+    # lower than the current position are not visited (harmless for purge
+    # and sessions explorer)
     my ( $last, $rows );
     do {
         my $sth =
           $dbh->prepare_cached( $sql
               . ( defined($last) ? ' WHERE id > ?' : '' )
-              . " ORDER BY id LIMIT $BatchSize" );
+              . " ORDER BY id LIMIT $limit" );
         $sth->execute( defined($last) ? ($last) : () );
         $rows = $sth->fetchall_arrayref;
         $sub->(@$_) foreach (@$rows);
         $last = $rows->[-1]->[0] if (@$rows);
-    } while ( @$rows >= $BatchSize );
+    } while ( @$rows >= $limit );
     return;
 }
 
