@@ -10,7 +10,7 @@ use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::_common;
 use Net::LDAP::Util qw(escape_filter_value);
 
-our $VERSION = '1.3.6';
+our $VERSION = '1.4.0';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
@@ -28,7 +28,7 @@ sub populate {
 
 sub unserialize {
     my $session = shift;
-    my $tmp = { serialized => $session };
+    my $tmp     = { serialized => $session };
     Apache::Session::Serialize::JSON::unserialize($tmp);
     return $tmp->{data};
 }
@@ -64,36 +64,33 @@ sub searchOnExpr {
 
 sub _query {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
+    my %res = ();
     $args->{ldapObjectClass}      ||= 'applicationProcess';
     $args->{ldapAttributeId}      ||= 'cn';
     $args->{ldapAttributeContent} ||= 'description';
     $args->{ldapAttributeIndex}   ||= 'ou';
 
-    my %res = ();
-    my $ldap =
-      Apache::Session::Browseable::Store::LDAP::ldap( { args => $args } );
-    my $msg = $ldap->search(
+    my $obj  = Apache::Session::Browseable::Store::LDAP->new($args);
+    my $ldap = $obj->ldap();
+    my $msg  = $ldap->search(
         base   => $args->{ldapConfBase},
         filter => "(&(objectClass="
           . $args->{ldapObjectClass} . ")("
           . $args->{ldapAttributeIndex}
           . "=${selectField}_$value))",
-
-        #scope => 'base',
         attrs => [ $args->{ldapAttributeContent}, $args->{ldapAttributeId} ],
     );
-
     $ldap->unbind();
     $ldap->disconnect();
 
     if ( $msg->code ) {
-        Apache::Session::Browseable::Store::LDAP->logError($msg);
+        $obj->logError($msg);
     }
     else {
         foreach my $entry ( $msg->entries ) {
-            my $id = $entry->get_value( $args->{ldapAttributeId} ) or die;
+            my $id  = $entry->get_value( $args->{ldapAttributeId} ) or die;
             my $tmp = $entry->get_value( $args->{ldapAttributeContent} );
-            next unless ($tmp);
+            next unless $tmp;
             eval { $tmp = unserialize($tmp); };
             next if ($@);
             if (@fields) {
@@ -104,6 +101,7 @@ sub _query {
             }
         }
     }
+
     return \%res;
 }
 
@@ -116,11 +114,10 @@ sub get_key_from_all_sessions {
     $args->{ldapAttributeContent} ||= 'description';
     $args->{ldapAttributeIndex}   ||= 'ou';
 
-    my %res;
-
-    my $ldap =
-      Apache::Session::Browseable::Store::LDAP::ldap( { args => $args } );
-    my $msg = $ldap->search(
+    my %res  = ();
+    my $obj  = Apache::Session::Browseable::Store::LDAP->new($args);
+    my $ldap = $obj->ldap();
+    my $msg  = $ldap->search(
         base => $args->{ldapConfBase},
 
      # VERY STRANGE BUG ! With this filter, description isn't base64 encoded !!!
@@ -133,17 +130,17 @@ sub get_key_from_all_sessions {
     );
 
     $ldap->unbind();
-
+    $ldap->disconnect();
     if ( $msg->code ) {
-        Apache::Session::Browseable::Store::LDAP->logError($msg);
+        $obj->logError($msg);
     }
     else {
         foreach my $entry ( $msg->entries ) {
-            my $id = $entry->get_value( $args->{ldapAttributeId} ) or die;
+            my $id  = $entry->get_value( $args->{ldapAttributeId} ) or die;
             my $tmp = $entry->get_value( $args->{ldapAttributeContent} );
             next unless ($tmp);
             eval { $tmp = unserialize($tmp); };
-            next if ($@);
+            next if $@;
             if ( ref($data) eq 'CODE' ) {
                 $res{$id} = &$data( $tmp, $id );
             }
@@ -190,6 +187,8 @@ Apache::Session::Browseable::LDAP - An implementation of Apache::Session::LDAP
 
 This module is an implementation of Apache::Session. It uses an LDAP directory
 to store datas.
+
+See L<Apache::Session::Browseable::Store::LDAP> for the available options.
 
 =head1 COPYRIGHT AND LICENSE
 
