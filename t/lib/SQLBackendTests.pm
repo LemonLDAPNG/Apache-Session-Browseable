@@ -184,10 +184,14 @@ sub run_tests {
 
     # Case and accent sensitive searches, on indexed and non indexed fields
     if ( $o{exact} ) {
+        # Character string: DBD::mysql sends other strings in Latin-1, which
+        # an utf8mb4 column rejects
+        my $elodie = "\x{c9}lodie";
+        utf8::upgrade($elodie);
         my $uid = $newSession->(
             %{ $data{dwho} },
-            uid          => "\x{c9}lodie",
-            _whatToTrace => "\x{c9}lodie",
+            uid          => $elodie,
+            _whatToTrace => $elodie,
         );
         foreach my $f (qw(_whatToTrace uid)) {
             $res = $class->searchOn( $args, $f, 'DWHO' );
@@ -201,11 +205,7 @@ sub run_tests {
                 is_deeply( $res, {}, "searchOnExpr on $f: $v* doesn't match" );
             }
 
-            # Character string stored in UTF-8 (DBD::mysql sends other
-            # strings in Latin-1)
-            my $v = "\x{c9}lodie";
-            utf8::upgrade($v);
-            $res = $class->searchOn( $args, $f, $v );
+            $res = $class->searchOn( $args, $f, $elodie );
             is( $name->($res), $uid, "searchOn on $f: exact value found" );
         }
         $dbh->do( "DELETE FROM $table WHERE id=?", undef, $uid );
