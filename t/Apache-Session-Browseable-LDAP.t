@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 100;
+plan tests => 108;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -284,3 +284,79 @@ is(
     '(&(ou=a_1\29\28x)(!(ou=b_x\2a)))',
     '_lowerThanAssertion: escaped values'
 );
+
+# _pagedSearch: page loop guards
+{
+
+    package MockPagedResponse;
+    sub new    { bless { cookie => $_[1] }, $_[0] }
+    sub cookie { $_[0]->{cookie} }
+
+    package MockSearchResult;
+    sub new {
+        my ( $class, $entries, $cookie ) = @_;
+        bless {
+            entries => $entries,
+            paged   => defined $cookie ? MockPagedResponse->new($cookie) : undef,
+        }, $class;
+    }
+    sub code    {0}
+    sub count   { scalar @{ $_[0]->{entries} } }
+    sub entries { @{ $_[0]->{entries} } }
+    sub control { $_[0]->{paged} ? ( $_[0]->{paged} ) : () }
+
+    package MockPagedLDAP;
+    sub new  { bless { pages => [ @_[ 1 .. $#_ ] ], i => 0 }, $_[0] }
+    sub search { my $self = shift; return $self->{pages}->[ $self->{i}++ ] }
+}
+
+# Runs _pagedSearch on fake pages, returns the collected entries and STDERR
+sub pagedSearchRun {
+    my ( $pages, $size ) = @_;
+    local $Apache::Session::Browseable::LDAP::PageSize = $size
+      if defined $size;
+    my @seen;
+    my $err = '';
+    {
+        local *STDERR;
+        open STDERR, '>', \$err;
+        $browseable->_pagedSearch( MockPagedLDAP->new(@$pages),
+            sub { push @seen, $_[0] }, base => 'x' );
+    }
+    return ( \@seen, $err );
+}
+
+# Normal pagination: last page has an empty cookie
+my ( $entries, $err ) = pagedSearchRun(
+    [
+        MockSearchResult->new( [ 'a', 'b' ], 'x' ),
+        MockSearchResult->new( ['c'],       'y' ),
+        MockSearchResult->new( [],          '' ),
+    ],
+    undef
+);
+is_deeply( $entries, [ 'a', 'b', 'c' ], '_pagedSearch: all pages read' );
+is( $err, '', '_pagedSearch: no warning' );
+
+# Constant cookie would loop forever
+( $entries, $err ) = pagedSearchRun(
+    [
+        MockSearchResult->new( ['a'], 'x' ),
+        MockSearchResult->new( ['b'], 'x' ),
+    ],
+    undef
+);
+is_deeply( $entries, [ 'a', 'b' ], '_pagedSearch: constant cookie stops' );
+like( $err, qr/cookie didn't change/, '_pagedSearch: constant cookie warned' );
+
+# No response control with a full page: result may be truncated
+( $entries, $err ) = pagedSearchRun( [ MockSearchResult->new( [ 'a', 'b' ] ) ],
+    2 );
+is_deeply( $entries, [ 'a', 'b' ], '_pagedSearch: no control, full page' );
+like( $err, qr/no paged results control/,
+    '_pagedSearch: full page without control warned' );
+
+# No response control with a partial page: everything was returned
+( $entries, $err ) = pagedSearchRun( [ MockSearchResult->new( ['a'] ) ], 2 );
+is_deeply( $entries, ['a'], '_pagedSearch: no control, partial page' );
+is( $err, '', '_pagedSearch: partial page without control, no warning' );

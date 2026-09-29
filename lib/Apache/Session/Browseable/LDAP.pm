@@ -442,15 +442,31 @@ sub _presenceFilter {
 sub _pagedSearch {
     my ( $class, $ldap, $cb, %search ) = @_;
     my $page = Net::LDAP::Control::Paged->new( size => $PageSize );
+    my $cookie;
     while (1) {
         my $msg = $ldap->search( %search, control => [$page] );
         return $msg if $msg->code;
         $cb->($_) foreach ( $msg->entries );
 
-        # Servers without paged results support return everything at once
         my ($resp) = $msg->control(LDAP_CONTROL_PAGED);
-        return unless ( $resp and $resp->cookie );
-        $page->cookie( $resp->cookie );
+
+        # Servers without paged results support return everything at once, but
+        # a full page may hide a truncated result
+        unless ($resp) {
+            print STDERR
+              "paged search: no paged results control in the response, "
+              . "results may be truncated\n"
+              if ( defined $cookie or $msg->count >= $PageSize );
+            return;
+        }
+        return unless ( $resp->cookie );
+
+        # A server or proxy returning a constant cookie would loop forever
+        if ( defined $cookie and $resp->cookie eq $cookie ) {
+            print STDERR "paged search: cookie didn't change, stopping\n";
+            return;
+        }
+        $page->cookie( $cookie = $resp->cookie );
     }
 }
 
