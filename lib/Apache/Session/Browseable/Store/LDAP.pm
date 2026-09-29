@@ -6,14 +6,9 @@ use Net::LDAP;
 our $VERSION = '1.4.0';
 
 sub new {
-    my $class = shift;
-    return bless {}, $class;
-}
-
-sub fromArgs {
     my ( $class, $args ) = @_;
-    my $self = $class->new;
-    $self->{args} = $args;
+    my $self = bless {}, $class;
+    $self->{args} = $args if ( ref($args) eq 'HASH' );
     return $self;
 }
 
@@ -205,7 +200,6 @@ sub ldap {
         my $mesg = $ldap->start_tls( %{ $srv->{tlsParams} } );
         if ( $mesg->code ) {
             $self->logError($mesg);
-            return;
         }
     }
 
@@ -225,7 +219,6 @@ sub ldap {
     my $bind = $self->_bind( $ldap, $srv->{tlsParams} );
     if ( $bind->code ) {
         $self->logError($bind);
-        return;
     }
 
     $self->{ldap} = $ldap;
