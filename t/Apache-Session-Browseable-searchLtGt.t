@@ -152,6 +152,27 @@ foreach my $backend (qw(Postgres MySQL SQLite Cassandra)) {
     }
 }
 
+# Cassandra: as the other backends, a non numeric value returns nothing and
+# prints an error instead of being compared as 0
+SKIP: {
+    my $class = 'Apache::Session::Browseable::Cassandra';
+    skip "$class can't be loaded", 6 unless ( eval "require $class" );
+    no strict 'refs';
+    no warnings 'redefine';
+    foreach my $m (qw(searchLt searchGt)) {
+        my $scans = 0;
+        local *{"${class}::get_key_from_all_sessions"} = sub { $scans++; {} };
+        local *STDERR;
+        open STDERR, '>', \my $err;
+        my $res = $class->$m( $index, '_oidcRtUpdate', 'abc' );
+        is_deeply( $res, {},
+            "Cassandra: $m with a non numeric value returns nothing" );
+        like( $err, qr/value must be a number/,
+            "Cassandra: $m with a non numeric value prints an error" );
+        is( $scans, 0, "Cassandra: $m with a non numeric value reads nothing" );
+    }
+}
+
 # No public fallback in _common.pm: File keeps the Lemonldap::NG one
 SKIP: {
     my $class = 'Apache::Session::Browseable::File';

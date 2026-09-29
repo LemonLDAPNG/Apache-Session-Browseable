@@ -30,12 +30,16 @@ sub populate {
 # in Perl. As with other backends, sessions without the field are skipped
 sub searchLt {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
+    $value = $class->_checkSearchValue( '<', $value );
+    return {} unless ( defined $value );
     return $class->_searchByTest( $args, $selectField,
         sub { defined( $_[0] ) and $_[0] < $value }, @fields );
 }
 
 sub searchGt {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
+    $value = $class->_checkSearchValue( '>', $value );
+    return {} unless ( defined $value );
     return $class->_searchByTest( $args, $selectField,
         sub { defined( $_[0] ) and $_[0] > $value }, @fields );
 }
@@ -114,9 +118,13 @@ Instead, you may pass in an already-opened DBI handle to your database.
 =head1 searchLt() AND searchGt()
 
 They take the same arguments and return the same data as searchOn(): sessions
-whose field is lower (or greater) than the given value, which is excluded.
-They read all sessions and compare fields in Perl: a non-numeric value is
-compared as 0, or as its numeric prefix.
+whose field is lower (or greater) than the given value, which is excluded. The
+value must be a number (C<12>, C<-12> or C<12.5>): otherwise nothing is
+returned and an error is printed on STDERR. Spaces around the value are
+ignored.
+
+They read all sessions and compare fields in Perl: a non-numeric field value
+is compared as 0, or as its numeric prefix.
 
 Sessions without the field are never returned, as with the other backends of
 this distribution. This differs from the Perl fallback of Lemonldap::NG,
