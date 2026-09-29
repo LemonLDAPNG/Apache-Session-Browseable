@@ -76,7 +76,7 @@ sub _query {
     my $fields = join( ',', 'id', @$select );
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
-    $sth->execute( @{ $query->{values} } );
+    $sth->execute( $class->_utf8( @{ $query->{values} } ) );
 
     my $res = $sth->fetchall_hashref('id') or return {};
     $class->_renameAliases( $res, $aliases );
@@ -115,7 +115,8 @@ sub deleteIfLowerThan {
     return 0 unless ($query);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
+    my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query",
+        undef, $class->_utf8(@bind) );
     return 0 unless defined $rows;
 
     if (wantarray) {
@@ -206,12 +207,20 @@ sub _sqlPath {
         ( my $f = $field ) =~ s/(["\\])/\\$1/g;
         $path = qq{\$."$f"};
     }
+    ($path) = $class->_utf8($path);
     return $dbh->quote($path) if ( defined $dbh );
 
     # No database handle: quote the path here (MySQL escapes backslashes)
     $path =~ s/\\/\\\\/g;
     $path =~ s/'/''/g;
     return "'$path'";
+}
+
+# DBD::mysql sends strings as stored by Perl: store them in UTF-8 so that
+# characters U+0080 to U+00FF are not sent in Latin-1
+sub _utf8 {
+    my $class = shift;
+    return map { my $s = $_; utf8::upgrade($s); $s } @_;
 }
 
 # Build the SELECT list for the given fields. Column aliases are generated
@@ -356,6 +365,9 @@ Use it with Perl:
 Don't set C<Index>: any field can be searched from C<a_session> and the store
 would try to write indexed fields into columns of the same name, which don't
 exist in a JSON table. C<populate()> warns when C<Index> is set.
+
+Field names and searched values are character strings: a UTF-8 encoded byte
+string doesn't match non-ASCII values.
 
 Use it like L<Apache::Session::Browseable::MySQL>
 

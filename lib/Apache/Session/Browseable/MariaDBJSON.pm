@@ -31,7 +31,8 @@ sub populate {
 sub _sqlField {
     my ( $class, $dbh, $field, $args ) = @_;
     if ( $args and $class->_fieldIsIndexed( $args, $field ) ) {
-        ( my $f = $field ) =~ s/`/``/g;
+        my ($f) = $class->_utf8($field);
+        $f =~ s/`/``/g;
         return "`$f`";
     }
     return 'JSON_VALUE(a_session, ' . $class->_sqlPath( $dbh, $field ) . ')';
@@ -155,7 +156,9 @@ get_key_from_all_sessions() returns C<undef> for them when called with field
 names.
 
 Searches are exact (case- and accent-sensitive) for all fields, as long as
-generated text columns use the C<utf8mb4_bin> collation (see above).
+generated text columns use the C<utf8mb4_bin> collation (see above). Field
+names and searched values are character strings: a UTF-8 encoded byte string
+doesn't match non-ASCII values.
 
 To add a generated column to an existing table:
 
