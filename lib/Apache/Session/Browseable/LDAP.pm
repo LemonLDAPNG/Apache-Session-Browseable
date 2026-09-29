@@ -10,7 +10,7 @@ use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::_common;
 use Net::LDAP::Util qw(escape_filter_value);
 
-our $VERSION = '1.3.7';
+our $VERSION = '1.4.0';
 our @ISA     = qw(Apache::Session Apache::Session::Browseable::_common);
 
 sub populate {
@@ -70,8 +70,7 @@ sub _query {
     $args->{ldapAttributeContent} ||= 'description';
     $args->{ldapAttributeIndex}   ||= 'ou';
 
-    my $obj = bless { args => $args },
-      'Apache::Session::Browseable::Store::LDAP';
+    my $obj  = Apache::Session::Browseable::Store::LDAP->fromArgs($args);
     my $ldap = $obj->ldap();
     my $msg  = $ldap->search(
         base   => $args->{ldapConfBase},
@@ -115,9 +114,8 @@ sub get_key_from_all_sessions {
     $args->{ldapAttributeContent} ||= 'description';
     $args->{ldapAttributeIndex}   ||= 'ou';
 
-    my %res = ();
-    my $obj = bless { args => $args },
-      'Apache::Session::Browseable::Store::LDAP';
+    my %res  = ();
+    my $obj  = Apache::Session::Browseable::Store::LDAP->fromArgs($args);
     my $ldap = $obj->ldap();
     my $msg  = $ldap->search(
         base => $args->{ldapConfBase},
@@ -132,7 +130,7 @@ sub get_key_from_all_sessions {
     );
 
     $ldap->unbind();
-
+    $ldap->disconnect();
     if ( $msg->code ) {
         $obj->logError($msg);
     }
@@ -189,6 +187,8 @@ Apache::Session::Browseable::LDAP - An implementation of Apache::Session::LDAP
 
 This module is an implementation of Apache::Session. It uses an LDAP directory
 to store datas.
+
+See L<Apache::Session::Browseable::Store::LDAP> for the available options.
 
 =head1 COPYRIGHT AND LICENSE
 

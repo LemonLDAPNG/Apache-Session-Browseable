@@ -10,6 +10,13 @@ sub new {
     return bless {}, $class;
 }
 
+sub fromArgs {
+    my ( $class, $args ) = @_;
+    my $self = $class->new;
+    $self->{args} = $args;
+    return $self;
+}
+
 sub insert {
     my $self    = shift;
     my $session = shift;
@@ -138,60 +145,44 @@ sub ldap {
     my $self = shift;
     return $self->{ldap} if $self->{ldap};
 
-    # Parse servers configuration
-    my ( @servers, %tlsParams, $useStartTls );
+    my @servers = $self->_parseServers;
 
-    foreach my $server ( split /[\s,]+/, $self->{args}->{ldapServer} ) {
-        if ( $server =~ m{^ldap\+tls://([^/]+)/?\??(.*)$} ) {
-            $useStartTls = 1;
-            $server      = $1;
-            %tlsParams   = split( /[&=]/, $2 || "" );
+    # Connect: first reachable server wins
+    my ( $ldap, $srv, @errors );
+    foreach my $s (@servers) {
+        $ldap = Net::LDAP->new(
+            $s->{server},
+            onerror   => undef,
+            keepalive => 1,
+            %{ $s->{tlsParams} },
+            (
+                $self->{args}->{ldapRaw} ? ( raw => $self->{args}->{ldapRaw} )
+                : ()
+            ),
+            (
+                $self->{args}->{ldapPort}
+                ? ( port => $self->{args}->{ldapPort} )
+                : ()
+            ),
+            (
+                $self->{args}->{ldapTimeout}
+                ? ( timeout => $self->{args}->{ldapTimeout} )
+                : ()
+            ),
+        );
+        if ($ldap) {
+            $srv = $s;
+            last;
         }
-        elsif ( $server =~ m{^(ldaps://[^/]+)/?\??(.*)$} ) {
-            $useStartTls = 0;
-            $server      = $1;
-            %tlsParams   = split( /[&=]/, $2 || "" );
-        }
-        else {
-            $useStartTls = 0;
-        }
-        push @servers, $server;
+        push @errors, "$s->{server}: " . ( $@ || 'unknown error' );
     }
+    die(    'Unable to connect to '
+          . join( ' ', map { $_->{server} } @servers ) . ": "
+          . join( ', ', @errors ) )
+      unless $ldap;
 
-    # Compatibility
-    $tlsParams{cafile} ||=
-      $self->{args}->{ldapCAFile} || $self->{args}->{caFile};
-    $tlsParams{capath} ||=
-      $self->{args}->{ldapCAPath} || $self->{args}->{caPath};
-    $tlsParams{verify}     ||= $self->{args}->{ldapVerify} || "require";
-    $tlsParams{clientcert} ||= $self->{args}->{ldapClientCert};
-    $tlsParams{clientkey}  ||= $self->{args}->{ldapClientKey};
-
-    # Connect
-    my $ldap = Net::LDAP->new(
-        \@servers,
-        onerror   => undef,
-        keepalive => 1,
-        %tlsParams,
-        (
-            $self->{args}->{ldapRaw} ? ( raw => $self->{args}->{ldapRaw} )
-            : ()
-        ),
-        (
-            $self->{args}->{ldapPort} ? ( port => $self->{args}->{ldapPort} )
-            : ()
-        ),
-        (
-            $self->{args}->{ldapTimeout}
-            ? ( timeout => $self->{args}->{ldapTimeout} )
-            : ()
-        )
-    );
-
-    unless ($ldap) {
-        die( 'Unable to connect to ' . join( ' ', @servers ) . ": " . $@ );
-    }
-    elsif ( $Net::LDAP::VERSION < '0.64' ) {
+    # Check SSL error for old Net::LDAP versions
+    if ( $Net::LDAP::VERSION < '0.64' ) {
 
         # CentOS7 has a bug in which IO::Socket::SSL will return a broken
         # socket when certificate validation fails. Net::LDAP does not catch
@@ -209,39 +200,102 @@ sub ldap {
         }
     }
 
-    if ( $self->{args}->{ldapIOTimeout} ) {
+    # Start TLS if needed
+    if ( $srv->{startTls} ) {
+        my $mesg = $ldap->start_tls( %{ $srv->{tlsParams} } );
+        if ( $mesg->code ) {
+            $self->logError($mesg);
+            return;
+        }
+    }
+
+    # I/O timeouts (set on the final socket, after StartTLS)
+    if ( my $timeout = $self->{args}->{ldapIOTimeout} ) {
         eval { require IO::Socket::Timeout; };
         if ($@) {
-            die( 'IO::Socket::Timeout is required for IOTimeout: ' . $@ );
+            die( 'IO::Socket::Timeout is required for ldapIOTimeout: ' . $@ );
         }
         my $socket = $ldap->socket;
         IO::Socket::Timeout->enable_timeouts_on($socket);
-        $socket->read_timeout( $self->{args}->{ldapIOTimeout} );
-        $socket->write_timeout( $self->{args}->{ldapIOTimeout} );
+        $socket->read_timeout($timeout);
+        $socket->write_timeout($timeout);
     }
 
-    # Start TLS if needed
-    if ($useStartTls) {
-        my $mesg = $ldap->start_tls(%tlsParams);
-        $self->logError($mesg) if $mesg->code;
+    # Bind
+    my $bind = $self->_bind( $ldap, $srv->{tlsParams} );
+    if ( $bind->code ) {
+        $self->logError($bind);
+        return;
     }
-
-    # Bind with credentials
-    my $bind = $self->_bind( $ldap, %tlsParams );
-    $self->logError($bind) if $bind->code;
 
     $self->{ldap} = $ldap;
     return $ldap;
 }
 
-sub _bind {
-    my ( $self, $ldap, %tlsParams ) = @_;
+my @tlsKeys = qw(verify sslversion ciphers clientcert clientkey keydecrypt
+  capath cafile checkcrl sslserver);
 
-    if ( $self->{args}->{ldapBindDN} && $self->{args}->{ldapBindPassword} ) {
-        return $ldap->bind( $self->{args}->{ldapBindDN},
+sub _parseServers {
+    my $self = shift;
+    my $args = $self->{args};
+
+    # Global defaults (compatibility: caFile/caPath)
+    my %defaults = (
+        cafile     => $args->{ldapCAFile} || $args->{caFile},
+        capath     => $args->{ldapCAPath} || $args->{caPath},
+        verify     => $args->{ldapVerify} || 'require',
+        clientcert => $args->{ldapClientCert},
+        clientkey  => $args->{ldapClientKey},
+    );
+
+    my @servers;
+    foreach my $server ( split /[\s,]+/, $args->{ldapServer} ) {
+        next unless length $server;
+        my ( $startTls, $query ) = ( 0, '' );
+        if ( $server =~ m{^ldap\+tls://([^/?]+)/?\??(.*)$} ) {
+            ( $server, $query, $startTls ) = ( $1, $2, 1 );
+        }
+        elsif ( $server =~ m{^(ldaps://[^/?]+)/?\??(.*)$} ) {
+            ( $server, $query ) = ( $1, $2 );
+        }
+
+        my %urlParams;
+        foreach ( split /&/, $query ) {
+            my ( $k, $v ) = split /=/, $_, 2;
+            $urlParams{$k} = $v if defined $k;
+        }
+
+        my %tlsParams;
+        foreach my $k (@tlsKeys) {
+            my $v =
+              ( defined $urlParams{$k} and length $urlParams{$k} )
+              ? $urlParams{$k}
+              : $defaults{$k};
+            $tlsParams{$k} = $v if defined $v and length $v;
+        }
+        push @servers,
+          {
+            server    => $server,
+            startTls  => $startTls,
+            tlsParams => \%tlsParams,
+          };
+    }
+    return @servers;
+}
+
+sub _bind {
+    my ( $self, $ldap, $tlsParams ) = @_;
+    my $dn = $self->{args}->{ldapBindDN};
+
+    # Simple bind
+    if ( defined $dn and length $dn ) {
+        return $ldap->bind( $dn,
             password => $self->{args}->{ldapBindPassword} );
     }
-    elsif ( $tlsParams{clientcert} && $tlsParams{clientkey} ) {
+
+    # mTLS: SASL EXTERNAL
+    elsif ( $ldap->socket->isa('IO::Socket::SSL') and $tlsParams->{clientcert} )
+    {
         eval { require Authen::SASL; };
         if ($@) {
             die( 'Authen::SASL is required for EXTERNAL binding: ' . $@ );
@@ -252,6 +306,8 @@ sub _bind {
         );
         return $ldap->bind( undef, sasl => $sasl );
     }
+
+    # Anonymous
     else {
         return $ldap->bind();
     }
@@ -266,6 +322,8 @@ sub logError {
 1;
 
 =pod
+
+=encoding utf8
 
 =head1 NAME
 
@@ -289,25 +347,79 @@ objects are stored in an LDAP directory file using the Net::LDAP Perl module.
 
 =head1 OPTIONS
 
-This module requires one argument in the usual Apache::Session style. The
-keys ldapServer, ldapBase, ldapBindDN, ldapBindPassword are required. The key
-ldapPort, ldapObjectClass, ldapAttributeId, ldapAttributeContent,
-ldapAttributeIndex, and ldapRaw are optional.
+Required: B<ldapServer> and B<ldapConfBase>. All others are optional.
+
 Example:
 
  tie %s, 'Apache::Session::Browseable::LDAP', undef,
     {
-        ldapServer           => 'localhost',
-        ldapBase             => 'dc=example,dc=com',
+        ldapServer           => 'ldaps://ldap.example.com/?verify=require',
+        ldapConfBase         => 'ou=sessions,dc=example,dc=com',
         ldapBindDN           => 'cn=admin,dc=example,dc=com',
         ldapBindPassword     => 'pass',
         Index                => 'uid ipAddr',
-        ldapObjectClass      => 'applicationProcess',
-        ldapAttributeId      => 'cn',
-        ldapAttributeContent => 'description',
-        ldapAttributeIndex   => 'ou',
-        ldapRaw              => '(?i:^jpegPhoto|;binary)',
     };
+
+=over
+
+=item ldapServer
+
+Space or comma separated list of servers, tried in order (failover). Each
+entry is one of:
+
+ host[:port] | ldap://host[:port]
+ ldaps://host[:port][/?params]
+ ldap+tls://host[:port][/?params]      (StartTLS)
+
+C<params> is a C<key=value&...> list of TLS options overriding the global ones
+for this server. Allowed keys: verify, sslversion, ciphers, clientcert,
+clientkey, keydecrypt, capath, cafile, checkcrl, sslserver. Other keys are
+ignored.
+
+=item ldapConfBase
+
+DN under which sessions are stored.
+
+=item ldapBindDN, ldapBindPassword
+
+Credentials for a simple bind. Without ldapBindDN, the connection binds with
+SASL EXTERNAL if it uses TLS with a client certificate, anonymously otherwise.
+
+=item ldapVerify
+
+Server certificate verification: C<none>, C<optional> or C<require> (default).
+
+=item ldapCAFile, ldapCAPath
+
+CA file/directory used to verify the server certificate.
+
+=item ldapClientCert, ldapClientKey
+
+Client certificate and key (PEM) for mutual TLS. The key may be omitted if
+included in the certificate file. SASL EXTERNAL requires L<Authen::SASL>.
+
+=item ldapTimeout
+
+Connection timeout (seconds).
+
+=item ldapIOTimeout
+
+Read/write timeout (seconds). Requires L<IO::Socket::Timeout>.
+
+=item ldapPort
+
+Default port.
+
+=item ldapRaw
+
+Regex of attributes returned as raw binary (see L<Net::LDAP>).
+
+=item ldapObjectClass, ldapAttributeId, ldapAttributeContent, ldapAttributeIndex
+
+Object class (default C<applicationProcess>) and attributes used for the
+session id (C<cn>), serialized content (C<description>) and indexes (C<ou>).
+
+=back
 
 =head1 COPYRIGHT AND LICENSE
 

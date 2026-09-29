@@ -24,7 +24,7 @@ Module::Build->new(
         'DBD::SQLite' => 0,
     },
     test_recommends    => { 'LWP::Protocol::PSGI' => 0, },
-    dist_version       => '1.3.19',
+    dist_version       => '1.4.0',
     autosplit          => [qw(lib/Apache/Session/Browseable/_common.pm)],
     configure_requires => { 'Module::Build' => 0, },
     meta_merge         => {
