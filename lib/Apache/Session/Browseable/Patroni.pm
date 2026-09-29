@@ -65,6 +65,10 @@ Use it with Perl:
        # PatroniCacheTTL            => 60,  # Leader cache TTL in seconds
        # PatroniCircuitBreakerDelay => 30,  # Delay before retrying failed API
 
+       # Use a GIN index for searchOn(), see
+       # Apache::Session::Browseable::PgJSON for its trade-offs:
+       # GinIndex                   => 1,
+
        # SSL options (verification enabled by default):
        # PatroniVerifySSL           => 1,   # Verify SSL certificates (default: 1)
        # PatroniSSLCAFile           => '/path/to/ca.pem',  # Custom CA file
