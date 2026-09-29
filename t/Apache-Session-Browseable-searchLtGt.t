@@ -173,6 +173,15 @@ SKIP: {
     }
 }
 
+# _buildCompareExpression() only accepts the operators it knows
+SKIP: {
+    my $class = 'Apache::Session::Browseable::SQLite';
+    skip "$class can't be loaded", 1 unless ( eval "require $class" );
+    eval { $class->_buildCompareExpression( '_utime', '; DROP TABLE x', 1 ) };
+    like( $@, qr/invalid operator/,
+        '_buildCompareExpression rejects an unknown operator' );
+}
+
 # No public fallback in _common.pm: File keeps the Lemonldap::NG one
 SKIP: {
     my $class = 'Apache::Session::Browseable::File';

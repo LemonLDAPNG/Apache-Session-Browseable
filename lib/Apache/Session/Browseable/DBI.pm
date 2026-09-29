@@ -190,6 +190,8 @@ sub _buildLowerThanExpression {
 # ">", $value a number checked by the caller
 sub _buildCompareExpression {
     my ( $class, $field, $op, $value ) = @_;
+    die "_buildCompareExpression: invalid operator '$op'\n"
+      unless ( $op eq '<' or $op eq '>' );
     return "cast($field as integer) $op $value";
 }
 
