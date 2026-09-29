@@ -12,6 +12,7 @@ run_tests(
 'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session hstore)'
     ],
     json    => 1,
+    scs     => 1,
     weird   => ["weird'field"],
     corrupt => '"x"=>"_json://{bad"',
 );

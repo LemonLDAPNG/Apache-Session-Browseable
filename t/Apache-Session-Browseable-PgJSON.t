@@ -12,4 +12,5 @@ run_tests(
     ],
     json  => 1,
     weird => [ "weird'field", 'a"b\\c' ],
+    scs   => 1,
 );

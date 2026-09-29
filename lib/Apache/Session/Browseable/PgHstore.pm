@@ -175,6 +175,13 @@ sub get_key_from_all_sessions {
 # Build SQL expression to get a field from a_session
 sub _sqlField {
     my ( $class, $field ) = @_;
+
+    # With standard_conforming_strings=off, backslashes are escape characters
+    # in plain literals: use an escape string literal in this case
+    if ( $field =~ /\\/ ) {
+        $field =~ s/(['\\])/$1$1/g;
+        return "a_session -> E'$field'";
+    }
     $field =~ s/'/''/g;
     return "a_session -> '$field'";
 }
