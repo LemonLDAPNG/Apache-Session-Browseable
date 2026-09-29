@@ -13,7 +13,7 @@ plan skip_all => "Redis error : $@"
   unless eval {
     $r = Redis->new( server => $test_dburl );
     $r->select($test_dbnum);
-    $r->flushall();
+    $r->flushdb();
   };
 
 plan tests => 57;
@@ -263,7 +263,7 @@ ok( !$r->sismember( "uid_ghost", $id_empty ),
     "Index cleaned for purged empty session" );
 
 # Test lazy cleanup of orphan index entries in searchOn/searchOnExpr
-$r->flushall;
+$r->flushdb;
 
 my %session_lz1;
 tie %session_lz1, $package, undef, $args;
@@ -314,4 +314,4 @@ is( keys %$hash, 0, "searchOnExpr returns nothing for expired session" );
 ok( !$r->sismember( "uid_expr_test", $id_lz3 ),
     "searchOnExpr lazy cleanup removed orphan lz3 from index" );
 
-$r->flushall;
+$r->flushdb;
