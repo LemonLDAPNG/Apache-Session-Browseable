@@ -83,7 +83,7 @@ for example a MySQL C<json> column) is first decoded as UTF-8 JSON; if it is
 not valid UTF-8, it is read as characters.
 
 Some stores return Latin-1 bytes instead: files when the session holds only
-Latin-1 characters, SQLite without C<sqlite_unicode>, and MySQL C<json> or
+Latin-1 characters, and SQLite without C<sqlite_unicode> or MySQL C<json> or
 C<text> columns holding data written by an old node using JSON::PP. A
 Latin-1 session that is also valid UTF-8 is then read as UTF-8: for example
 "Ã©" becomes "é". This needs every non-ASCII character of the session to be
