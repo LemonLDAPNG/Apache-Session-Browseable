@@ -23,7 +23,8 @@ sub populate {
           ref( $self->{args}->{Index} )
           ? $self->{args}->{Index}
           : [ split /\s+/, $self->{args}->{Index} ];
-        die "Apache::Session::Browseable::MySQLJSON: Index must not be set\n"
+        warn "Apache::Session::Browseable::MySQLJSON: Index should not be set,"
+          . " the store would write the fields as columns\n"
           if (@$index);
     }
 
@@ -345,8 +346,7 @@ Use it with Perl:
 
 Don't set C<Index>: any field can be searched from C<a_session> and the store
 would try to write indexed fields into columns of the same name, which don't
-exist in a JSON table. C<populate()> refuses to load the module when C<Index>
-is set.
+exist in a JSON table. C<populate()> warns when C<Index> is set.
 
 Use it like L<Apache::Session::Browseable::MySQL>
 
