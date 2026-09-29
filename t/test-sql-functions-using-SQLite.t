@@ -174,6 +174,27 @@ is(
     0,
     'non numeric "and" threshold: returns 0'
 );
+is(
+    quiet {
+        $class->deleteIfLowerThan( $args,
+            { or => { _utime => "\x{0661}\x{0662}" } } );
+    },
+    0,
+    'non ASCII digits threshold: returns 0'
+);
+foreach my $bad ( 'a', [ _utime => 250 ], \'x' ) {
+    foreach my $type (qw(or and)) {
+        is(
+            quiet {
+                eval { $class->deleteIfLowerThan( $args, { $type => $bad } ) };
+            },
+            0,
+            "\"$type\" is not a hash ref ("
+              . ( ref($bad) || $bad )
+              . '): returns 0'
+        ) or diag $@;
+    }
+}
 is( remaining($ids), 'a,b', 'non numeric threshold: nothing deleted' );
 
 # 7. deleteIfLowerThan with a decimal or negative threshold
