@@ -170,6 +170,35 @@ foreach (@tests) {
         'unflagged UTF-8: recheck bind bytes' );
 }
 
+# "a_session @> ?::jsonb" needs a jsonb column: searchOn() must drop GinIndex
+# (and warn) when the column is json, where the containment operator fails
+{
+    package FakeDbh;
+    sub selectrow_array { $_[0]->{type} }
+    package main;
+
+    no warnings 'redefine';
+    my $jsonb   = bless { type => 'jsonb' }, 'FakeDbh';
+    my $json    = bless { type => 'json' },  'FakeDbh';
+    my $current = $jsonb;
+    my ($seen);
+    local *Apache::Session::Browseable::PgJSON::_classDbh = sub {$current};
+    local *Apache::Session::Browseable::PgJSON::_query =
+      sub { $seen = $_[1]; return $seen };
+
+    is( $class->searchOn( { GinIndex => 1 }, 'k', 'v' )->{GinIndex},
+        1, 'GinIndex kept on a jsonb column' );
+
+    $current = $json;
+    my @warn;
+    {
+        local $SIG{__WARN__} = sub { push @warn, @_ };
+        $class->searchOn( { GinIndex => 1, TableName => 'other' }, 'k', 'v' );
+    }
+    ok( !$seen->{GinIndex}, 'GinIndex dropped on a json column' );
+    like( join( '', @warn ), qr/not jsonb/, 'json column warns' );
+}
+
 # Patroni inherits this query
 SKIP: {
     skip 'Patroni can\'t be loaded', 1
