@@ -25,6 +25,21 @@ sub _fieldIsIndexed {
     return ( grep { $_ eq $field } @$index );
 }
 
+# deleteIfLowerThan() thresholds are inserted into SQL queries, so they must
+# be numbers
+sub _checkThresholds {
+    my ( $class, $rule ) = @_;
+    my $thresholds = $rule->{or} || $rule->{and};
+    return 1 unless ( ref($thresholds) eq 'HASH' );
+    foreach ( values %$thresholds ) {
+        unless ( defined($_) and /^-?\d+(?:\.\d+)?\z/ ) {
+            print STDERR "deleteIfLowerThan: threshold must be a number\n";
+            return 0;
+        }
+    }
+    return 1;
+}
+
 1;
 __END__
 

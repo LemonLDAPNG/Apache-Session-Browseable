@@ -75,7 +75,8 @@ sub _query {
 
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
-    my $query;
+    my ( $query, @bind );
+    return 0 unless ( $class->_checkThresholds($rule) );
     if ( $rule->{or} ) {
         $query = join ' OR ',
           map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} }
@@ -83,20 +84,24 @@ sub deleteIfLowerThan {
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ',
-          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} }
-          keys %{ $rule->{or} };
-    }
-    if ( $rule->{not} ) {
-        $query = "($query) AND "
-          . join( ' AND ',
-            map { qq{a_session->>"\$.$_" <> '$rule->{not}->{$_}'} }
-              keys %{ $rule->{not} } );
+          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{and}->{$_}} }
+          keys %{ $rule->{and} };
     }
     return 0 unless ($query);
+    if ( $rule->{not} ) {
+        $query = "($query) AND " . join(
+            ' AND ',
+            map {
+                push @bind, $rule->{not}->{$_};
+                qq{(a_session->>"\$.$_" IS NULL OR a_session->>"\$.$_" <> ?)}
+              }
+              keys %{ $rule->{not} }
+        );
+    }
     my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do("DELETE FROM $table_name WHERE $query");
+    my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
     return 0 unless defined $rows;
 
     if (wantarray) {
