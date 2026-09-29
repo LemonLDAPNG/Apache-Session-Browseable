@@ -53,6 +53,27 @@ my $dir = tempdir( CLEANUP => 1 );
         { Directory => $dir, LockDirectory => $dir },
         $latin, $wide
     );
+
+    # Known limit: File writes Latin-1 bytes when every character of the
+    # session is in the Latin-1 range. When those characters also form a
+    # valid UTF-8 sequence, the bytes are read back decoded as UTF-8: the two
+    # characters U+00C3 U+00A9 are read as the single character U+00E9. This
+    # test pins the current behaviour, which is not the desired one.
+    my $ambiguous = "\x{c3}\x{a9}lodie";
+    my %session;
+    tie %session, 'Apache::Session::Browseable::File', undef,
+      { Directory => $dir, LockDirectory => $dir };
+    $session{uid} = 'u8';
+    $session{cn}  = $ambiguous;
+    my $id = $session{_session_id};
+    untie %session;
+    tie %session, 'Apache::Session::Browseable::File', $id,
+      { Directory => $dir, LockDirectory => $dir };
+    is( $session{cn}, "\x{e9}lodie",
+        'File: Latin-1 value valid as UTF-8 is read back decoded (known limit)'
+    );
+    tied(%session)->delete;
+    untie %session;
 }
 
 SKIP: {
