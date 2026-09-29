@@ -151,7 +151,22 @@ sub _query {
 
     my $obj  = Apache::Session::Browseable::Store::LDAP->fromArgs($args);
     my $ldap = $obj->ldap();
-    my $msg  = $ldap->search(
+    my $msg  = $class->_pagedSearch(
+        $ldap,
+        sub {
+            my $entry = shift;
+            my $id    = $entry->get_value( $args->{ldapAttributeId} ) or die;
+            my $tmp   = $entry->get_value( $args->{ldapAttributeContent} );
+            return unless $tmp;
+            eval { $tmp = unserialize($tmp); };
+            return if ($@);
+            if (@fields) {
+                $res{$id}->{$_} = $tmp->{$_} foreach (@fields);
+            }
+            else {
+                $res{$id} = $tmp;
+            }
+        },
         base   => $args->{ldapConfBase},
         scope  => 'one',
         filter => "(&(objectClass="
@@ -162,25 +177,7 @@ sub _query {
     );
     $ldap->unbind();
     $ldap->disconnect();
-
-    if ( $msg->code ) {
-        $obj->logError($msg);
-    }
-    else {
-        foreach my $entry ( $msg->entries ) {
-            my $id  = $entry->get_value( $args->{ldapAttributeId} ) or die;
-            my $tmp = $entry->get_value( $args->{ldapAttributeContent} );
-            next unless $tmp;
-            eval { $tmp = unserialize($tmp); };
-            next if ($@);
-            if (@fields) {
-                $res{$id}->{$_} = $tmp->{$_} foreach (@fields);
-            }
-            else {
-                $res{$id} = $tmp;
-            }
-        }
-    }
+    $obj->logError($msg) if $msg;
 
     return \%res;
 }
@@ -197,7 +194,26 @@ sub get_key_from_all_sessions {
     my %res  = ();
     my $obj  = Apache::Session::Browseable::Store::LDAP->fromArgs($args);
     my $ldap = $obj->ldap();
-    my $msg  = $ldap->search(
+    my $msg  = $class->_pagedSearch(
+        $ldap,
+        sub {
+            my $entry = shift;
+            my $id    = $entry->get_value( $args->{ldapAttributeId} ) or die;
+            my $tmp   = $entry->get_value( $args->{ldapAttributeContent} );
+            return unless ($tmp);
+            eval { $tmp = unserialize($tmp); };
+            return if $@;
+            if ( ref($data) eq 'CODE' ) {
+                $res{$id} = &$data( $tmp, $id );
+            }
+            elsif ($data) {
+                $data = [$data] unless ( ref($data) );
+                $res{$id}->{$_} = $tmp->{$_} foreach (@$data);
+            }
+            else {
+                $res{$id} = $tmp;
+            }
+        },
         base  => $args->{ldapConfBase},
         scope => 'one',
 
@@ -213,28 +229,7 @@ sub get_key_from_all_sessions {
 
     $ldap->unbind();
     $ldap->disconnect();
-    if ( $msg->code ) {
-        $obj->logError($msg);
-    }
-    else {
-        foreach my $entry ( $msg->entries ) {
-            my $id  = $entry->get_value( $args->{ldapAttributeId} ) or die;
-            my $tmp = $entry->get_value( $args->{ldapAttributeContent} );
-            next unless ($tmp);
-            eval { $tmp = unserialize($tmp); };
-            next if $@;
-            if ( ref($data) eq 'CODE' ) {
-                $res{$id} = &$data( $tmp, $id );
-            }
-            elsif ($data) {
-                $data = [$data] unless ( ref($data) );
-                $res{$id}->{$_} = $tmp->{$_} foreach (@$data);
-            }
-            else {
-                $res{$id} = $tmp;
-            }
-        }
-    }
+    $obj->logError($msg) if $msg;
 
     return \%res;
 }
@@ -363,8 +358,10 @@ When the field is indexed, sessions are found through their index values:
 sessions whose value is C<0> or empty, or written before the field was added
 to C<Index>, are missed until they are rewritten.
 
-searchLt() and searchGt() use the paged results control. With OpenLDAP, if
-the bind DN isn't the rootdn, allow it to read all sessions, for example with
+Searches returning many sessions (get_key_from_all_sessions(), searchOn(),
+searchOnExpr(), searchLt(), searchGt()) use the paged results control. With
+OpenLDAP, if the bind DN isn't the rootdn, allow it to read all sessions, for
+example with
 C<limits dn.exact="E<lt>bind DNE<gt>" size=unlimited> (this covers paged and
 unpaged searches).
 

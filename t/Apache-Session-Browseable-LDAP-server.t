@@ -102,6 +102,26 @@ is( $all->{$noIdx}->{foo}, 'bar', 'Session without index: data' );
 $all = $package->get_key_from_all_sessions( $args, 'foo' );
 is_deeply( $all->{$noIdx}, { foo => 'bar' }, 'Field extraction' );
 
+# Paged searches
+{
+    my $idx2 = newSession( { uid => 'dwho2' } );
+    no warnings 'redefine';
+    my $orig     = \&Net::LDAP::search;
+    my $requests = 0;
+    local *Net::LDAP::search = sub { $requests++; $orig->(@_) };
+    local $Apache::Session::Browseable::LDAP::PageSize = 1;
+    is( scalar keys %{ $package->get_key_from_all_sessions($args) },
+        3, 'get_key_from_all_sessions: all sessions with 1 per page' );
+    ok( $requests >= 3, 'get_key_from_all_sessions: paged' );
+    $requests = 0;
+    is_deeply(
+        ids( $package->searchOnExpr( $args, 'uid', 'dwho*' ) ),
+        [ sort ( $idx, $idx2 ) ],
+        'searchOnExpr with 1 per page'
+    );
+    ok( $requests >= 2, 'searchOnExpr: paged' );
+}
+
 # searchLt() / searchGt()
 clean();
 $args->{Index} = 'uid _session_kind _oidcRtUpdate';
