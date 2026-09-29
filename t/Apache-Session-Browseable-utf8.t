@@ -42,8 +42,7 @@ sub roundTrip {
 
 my $dir = tempdir( CLEANUP => 1 );
 
-# File: sessions holding only Latin-1 characters are written in Latin-1,
-# others in UTF-8
+# File: the serialized session is always written as UTF-8
 {
     local $SIG{__WARN__} = sub { warn @_ unless $_[0] =~ /^Wide character/ };
     require Apache::Session::Browseable::File;
@@ -54,11 +53,8 @@ my $dir = tempdir( CLEANUP => 1 );
         $latin, $wide
     );
 
-    # Known limit: File writes Latin-1 bytes when every character of the
-    # session is in the Latin-1 range. When those characters also form a
-    # valid UTF-8 sequence, the bytes are read back decoded as UTF-8: the two
-    # characters U+00C3 U+00A9 are read as the single character U+00E9. This
-    # test pins the current behaviour, which is not the desired one.
+    # Latin-1 range characters that also form a valid UTF-8 sequence: the
+    # session must survive, which needs the file to hold UTF-8
     my $ambiguous = "\x{c3}\x{a9}lodie";
     my %session;
     tie %session, 'Apache::Session::Browseable::File', undef,
@@ -67,11 +63,23 @@ my $dir = tempdir( CLEANUP => 1 );
     $session{cn}  = $ambiguous;
     my $id = $session{_session_id};
     untie %session;
+
+    my $raw;
+    {
+        local $/;
+        open my $fh, '<:raw', "$dir/$id" or die $!;
+        $raw = <$fh>;
+        close $fh;
+    }
+    my $decoded = $raw;
+    ok( utf8::decode($decoded), 'File: session file is valid UTF-8' );
+    like( $decoded, qr/\Q$ambiguous\E/,
+        'File: Latin-1 range value is stored as UTF-8' );
+
     tie %session, 'Apache::Session::Browseable::File', $id,
       { Directory => $dir, LockDirectory => $dir };
-    is( $session{cn}, "\x{e9}lodie",
-        'File: Latin-1 value valid as UTF-8 is read back decoded (known limit)'
-    );
+    is( $session{cn}, $ambiguous,
+        'File: Latin-1 value valid as UTF-8 is read back unchanged' );
     tied(%session)->delete;
     untie %session;
 }
