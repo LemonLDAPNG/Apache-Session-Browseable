@@ -48,15 +48,16 @@ END {
     }
 }
 
-# Remove all sessions
+# Remove everything below the container, deepest first
 sub clean {
     my $res = $ldap->search(
         base   => $container,
-        scope  => 'one',
         filter => '(objectClass=*)',
         attrs  => ['1.1'],
     );
-    $ldap->delete( $_->dn ) foreach $res->entries;
+    $ldap->delete($_)
+      foreach sort { length($b) <=> length($a) }
+      grep { $_ ne $container } map { $_->dn } $res->entries;
 }
 
 sub ids {
@@ -205,5 +206,32 @@ my $err = stderrOf(
 );
 is_deeply( $res, {}, 'searchGt: connection error, empty result' );
 like( $err, qr/searchGt: unable to connect/, '... and a warning' );
+
+# Only sessions stored directly under ldapConfBase are seen
+clean();
+$args->{Index} = 'uid _utime';
+my $top    = newSession( { uid => 'top', _utime => 5 } );
+my $nested = "ou=nested,$container";
+$ldap->add( $nested,
+    attrs => [ objectClass => 'organizationalUnit', ou => 'nested' ] );
+my $nestedId = newSession( { uid => 'nested', _utime => 5 },
+    { %$args, ldapConfBase => $nested } );
+is_deeply( ids( $package->get_key_from_all_sessions($args) ),
+    [$top], 'get_key_from_all_sessions: nested session ignored' );
+is_deeply( ids( $package->searchOn( $args, 'uid', 'nested' ) ),
+    [], 'searchOn: nested session ignored' );
+is_deeply( ids( $package->searchOnExpr( $args, 'uid', 'n*' ) ),
+    [], 'searchOnExpr: nested session ignored' );
+is_deeply( ids( $package->searchLt( $args, '_utime', 10 ) ),
+    [$top], 'searchLt: nested session ignored' );
+is_deeply(
+    ids(
+        $package->get_key_from_all_sessions(
+            { %$args, ldapConfBase => $nested }
+        )
+    ),
+    [$nestedId],
+    'Nested session found from its own branch'
+);
 
 done_testing();

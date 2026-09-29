@@ -153,6 +153,7 @@ sub _query {
     my $ldap = $obj->ldap();
     my $msg  = $ldap->search(
         base   => $args->{ldapConfBase},
+        scope  => 'one',
         filter => "(&(objectClass="
           . $args->{ldapObjectClass} . ")("
           . $args->{ldapAttributeIndex}
@@ -197,7 +198,8 @@ sub get_key_from_all_sessions {
     my $obj  = Apache::Session::Browseable::Store::LDAP->fromArgs($args);
     my $ldap = $obj->ldap();
     my $msg  = $ldap->search(
-        base => $args->{ldapConfBase},
+        base  => $args->{ldapConfBase},
+        scope => 'one',
 
      # VERY STRANGE BUG ! With this filter, description isn't base64 encoded !!!
      #filter => '(objectClass=applicationProcess)',
