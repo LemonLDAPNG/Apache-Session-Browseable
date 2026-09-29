@@ -17,8 +17,13 @@ our %TODO = (
     utf8Read     => 'non-ASCII values are read as bytes (fixed by #54)',
 );
 
-# Table with generated columns and indexes as documented, plus a generated
-# column with a name that needs quoting
+# Indexed field with a non-ASCII name, kept in UTF-8 so that DBD::mysql sends
+# UTF-8 bytes as well
+my $accented = "cl\x{e9}";
+utf8::upgrade($accented);
+
+# Table with generated columns and indexes as documented, plus generated
+# columns with names that need quoting
 subtest 'Generated columns' => sub {
     run_tests(
         class  => 'Apache::Session::Browseable::MariaDBJSON',
@@ -42,18 +47,22 @@ subtest 'Generated columns' => sub {
               . " AS (JSON_VALUE(a_session, '\$.ipAddr')) VIRTUAL,"
               . " `weird'field` varchar(8) COLLATE utf8mb4_bin"
               . " AS (JSON_VALUE(a_session, '\$.\"weird''field\"')) PERSISTENT,"
+              . " `$accented` varchar(64) COLLATE utf8mb4_bin"
+              . " AS (JSON_VALUE(a_session, '\$.\"$accented\"')) VIRTUAL,"
               . ' KEY _whatToTrace (_whatToTrace),'
               . ' KEY _session_kind (_session_kind), KEY _utime (_utime),'
               . ' KEY _lastSeen (_lastSeen), KEY ipAddr (ipAddr),'
-              . " KEY weird (`weird'field`)) ENGINE=InnoDB"
+              . " KEY weird (`weird'field`),"
+              . " KEY `$accented` (`$accented`)) ENGINE=InnoDB"
         ],
         index => "_whatToTrace _session_kind _utime _lastSeen ipAddr"
-          . " weird'field",
+          . " weird'field $accented",
         json         => 1,
         null         => 1,
         utf8         => 1,
         exact        => 1,
-        weird        => [ "weird'field", 'a"b\\c', 'a?b', 'x\\', 'a.b' ],
+        weird        => [ "weird'field", 'a"b\\c', 'a?b', 'x\\', 'a.b',
+            $accented ],
         explain_key  => 1,
         explain_fill => 100,
         explain      => sub {
