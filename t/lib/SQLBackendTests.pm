@@ -13,6 +13,9 @@ package SQLBackendTests;
 #  - null:    1 if a field can be stored as JSON null (JSON backends)
 #  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - corrupt: a_session value that can't be unserialized
+#
+# ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
+# of table names.
 
 use strict;
 use warnings;
@@ -25,6 +28,8 @@ sub run_tests {
     my %o = @_;
     my ( $class, $table ) = @o{qw(class table)};
     my $dsn = $ENV{"$o{env}_DSN"};
+    $table =~ s/^asb_test_/$ENV{ASB_TEST_TABLE_PREFIX}/
+      if $ENV{ASB_TEST_TABLE_PREFIX};
 
     plan skip_all => "DBD::$o{driver} is needed for this test"
       unless eval "require DBI; require DBD::$o{driver}; 1";
