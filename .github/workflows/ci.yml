@@ -61,4 +61,5 @@ jobs:
         run: |
           perl Build.PL
           ./Build
+          PERL_JSON_BACKEND=JSON::PP ./Build test
           ./Build test
