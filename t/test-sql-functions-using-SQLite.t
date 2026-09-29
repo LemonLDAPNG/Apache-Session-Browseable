@@ -291,7 +291,7 @@ is_deeply( $qargs->{Index}, [ 'uid', "a'b" ], 'Store: Index not modified' );
 {
     no warnings 'once';
     $ids = reset_sessions( map { ( "s$_" => { uid => "u$_" } ) } 1 .. 3 );
-    foreach my $size ( 0, -1, 'abc', undef ) {
+    foreach my $size ( 0, -1, 'abc', undef, 1_000_001, '9' x 26 ) {
         local $Apache::Session::Browseable::_common::BatchSize = $size;
         my $name = defined $size ? "'$size'" : 'undef';
         $res = eval {
