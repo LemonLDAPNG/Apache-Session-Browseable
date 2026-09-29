@@ -88,7 +88,7 @@ sub _jsonbColumn {
 
     my $dbh = $class->_classDbh($args);
     my $table = $args->{TableName} || $Apache::Session::Store::DBI::TableName;
-    my $cache = $dbh->{private_pgjson_type} ||= {};
+    my $cache = $dbh->{private_asb_pgjson_type} ||= {};
     unless ( exists $cache->{$table} ) {
         ( $cache->{$table} ) = $dbh->selectrow_array(
             q{SELECT t.typname FROM pg_attribute a
