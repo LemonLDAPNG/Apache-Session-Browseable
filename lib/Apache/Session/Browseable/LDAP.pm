@@ -123,9 +123,10 @@ sub get_key_from_all_sessions {
      # VERY STRANGE BUG ! With this filter, description isn't base64 encoded !!!
      #filter => '(objectClass=applicationProcess)',
 
+        # Sessions without any indexed value have no index attribute
         filter => '(&(objectClass='
           . $args->{ldapObjectClass} . ')('
-          . $args->{ldapAttributeIndex} . '=*))',
+          . $args->{ldapAttributeId} . '=*))',
         attrs => [ $args->{ldapAttributeId}, $args->{ldapAttributeContent} ],
     );
 
