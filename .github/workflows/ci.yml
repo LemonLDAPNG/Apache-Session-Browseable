@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Perl dependencies
-        run: sudo apt-get update && sudo apt-get install -y libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl libdbd-mariadb-perl libdbd-pg-perl liblwp-protocol-psgi-perl
+        run: sudo apt-get update && sudo apt-get install -y libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl libdbd-pg-perl liblwp-protocol-psgi-perl libmariadb-dev libssl-dev cpanminus build-essential && sudo cpanm --notest DBD::MariaDB
       - name: Build and run tests
         env:
           REDIS_URL: localhost:6379
