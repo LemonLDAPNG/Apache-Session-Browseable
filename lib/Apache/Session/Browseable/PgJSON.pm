@@ -28,6 +28,10 @@ sub populate {
 
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
+    if ( $args->{GinIndex} and !$class->_jsonbColumn($args) ) {
+        $args = { %$args };
+        delete $args->{GinIndex};
+    }
     return $class->_query( $args,
         $class->_searchOnQuery( $args, $selectField, $value ), @fields );
 }
@@ -62,6 +66,29 @@ sub _searchOnQuery {
           . ") AND $f =?",
         values => [ @docs, $value ],
     };
+}
+
+# The "a_session @> ..." conditions need a jsonb column: with a json column
+# every searchOn() would fail. Look the type up once per handle and table,
+# warn and fall back to the plain query when it is not jsonb.
+sub _jsonbColumn {
+    my ( $class, $args ) = @_;
+
+    my $dbh = $class->_classDbh($args);
+    my $table = $args->{TableName} || $Apache::Session::Store::DBI::TableName;
+    my $cache = $dbh->{private_pgjson_type} ||= {};
+    unless ( exists $cache->{$table} ) {
+        ( $cache->{$table} ) = $dbh->selectrow_array(
+            q{SELECT t.typname FROM pg_attribute a
+                JOIN pg_type t ON t.oid = a.atttypid
+               WHERE a.attrelid = to_regclass(?) AND a.attname = 'a_session'
+                 AND NOT a.attisdropped},
+            undef, $table
+        );
+        warn "GinIndex ignored: $table.a_session is not jsonb\n"
+          unless ( $cache->{$table} || '' ) eq 'jsonb';
+    }
+    return ( $cache->{$table} || '' ) eq 'jsonb';
 }
 
 sub searchOnExpr {
@@ -273,6 +300,9 @@ first:
 
   ALTER TABLE sessions ALTER COLUMN a_session TYPE jsonb
     USING a_session::jsonb;
+
+If the column is not "jsonb", C<GinIndex> is ignored: a warning is emitted
+once per table and searchOn() falls back to the query used without the option.
 
 Results are the same as without C<GinIndex>:
 
