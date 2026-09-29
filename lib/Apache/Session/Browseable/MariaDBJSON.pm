@@ -42,8 +42,8 @@ sub _sqlField {
 # Indexed fields are read from a generated column: a column that exists but
 # is not generated (for example left over from a migration from
 # Browseable::MySQL, where the store wrote real columns) stays NULL, so
-# searches and purge silently return nothing. Check it once per handle and
-# table
+# searches and purge silently return nothing. Check it once per handle,
+# table and Index list
 sub _checkIndex {
     my ( $class, $dbh, $args ) = @_;
     my $index =
@@ -54,7 +54,8 @@ sub _checkIndex {
 
     # DBI only keeps private_* attributes
     my $checked = $dbh->{private_asb_mariadbjson_index} ||= {};
-    return if ( $checked->{$table} );
+    my $key = join "\0", $table, @$index;
+    return if ( $checked->{$key} );
 
     my $sth = $dbh->prepare(
         'SELECT COLUMN_NAME, GENERATION_EXPRESSION'
@@ -76,7 +77,7 @@ sub _checkIndex {
           : 'there is no column with this name';
         push @unusable, "\"$field\" ($why)";
     }
-    $checked->{$table} = 1;
+    $checked->{$key} = 1;
 
     # Warn rather than die: the lookup compares names between Perl and
     # information_schema, which can fail on an exotic name encoding even when

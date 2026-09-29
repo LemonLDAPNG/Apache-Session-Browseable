@@ -44,7 +44,7 @@ sub check {
 my $args = { Index => 'uid', TableName => 'sessions' };
 
 # A generated column based on a_session is accepted silently, and the check is
-# done only once per handle and table
+# done only once per handle, table and Index list
 my $dbh =
   FakeDbh->new( rows => [ [ 'uid', "JSON_VALUE(a_session, '\$.uid')" ] ] );
 my ( $err, $warn ) = check( $dbh, $args );
@@ -55,6 +55,8 @@ check( $dbh, $args );
 is( $dbh->{prepares}, 1, 'result is memoized' );
 ok( $dbh->{private_asb_mariadbjson_index},
     'memoized on a DBI private attribute' );
+check( $dbh, { %$args, Index => 'uid lastSeen' } );
+is( $dbh->{prepares}, 2, 'checked again when Index changes' );
 
 # A column that exists but is not generated (migration from Browseable::MySQL)
 # is reported instead of silently returning nothing
