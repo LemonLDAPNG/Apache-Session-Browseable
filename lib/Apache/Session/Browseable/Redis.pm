@@ -132,6 +132,118 @@ sub searchOnExpr {
     return \%res;
 }
 
+sub searchLt {
+    my $class = shift;
+    return $class->_searchCompare( '<', @_ );
+}
+
+sub searchGt {
+    my $class = shift;
+    return $class->_searchCompare( '>', @_ );
+}
+
+# Remove session KEYS[2] from index KEYS[1] only if it doesn't exist, in one
+# step: a concurrent writer may be recreating it
+our $SREM_ORPHAN = q{if redis.call('exists',KEYS[2])==0 then }
+  . q{return redis.call('srem',KEYS[1],KEYS[2]) end return 0};
+
+# Trimmed number, or undef
+sub _number {
+    my ($v) = @_;
+    return undef unless ( defined($v) and !ref($v) );
+    $v =~ s/^\s+|\s+$//g;
+    return $v =~ /^-?[0-9]+(?:\.[0-9]+)?\z/ ? $v : undef;
+}
+
+# Sessions where $selectField isn't a number (see _number()) are skipped.
+# Indexed field: SCAN walks the keyspace server-side and returns only the
+# index sets of $selectField; only sets holding a matching value are read
+sub _searchCompare {
+    my ( $class, $op, $args, $selectField, $value, @fields ) = @_;
+
+    # LLNG CLI keeps spaces around the value ("--where 'f < 123 '")
+    $value = _number($value);
+    unless ( defined $value ) {
+        print STDERR 'search'
+          . ( $op eq '<' ? 'Lt' : 'Gt' )
+          . ": value must be a number\n";
+        return {};
+    }
+    my $test = sub {
+        my $v = _number(shift);
+        return 0 unless ( defined $v );
+        return $op eq '<' ? $v < $value : $v > $value;
+    };
+    my %res;
+    unless ( $class->isIndexed( $args, $selectField ) ) {
+        $class->get_key_from_all_sessions(
+            $args,
+            sub {
+                my ( $entry, $id ) = @_;
+                $res{$id} = $class->extractFields( $entry, @fields )
+                  if ( $test->( $entry->{$selectField} ) );
+                undef;
+            }
+        );
+        return \%res;
+    }
+
+    my $redisObj = $class->_getRedis($args);
+    my $prefix   = "${selectField}_";
+    ( my $pattern = $prefix ) =~ s/([*?\[\]\\])/\\$1/g;
+    my $cursor = 0;
+    do {
+        my ( $new_cursor, $sets ) =
+          $redisObj->scan( $cursor, MATCH => "$pattern*", COUNT => 1000 );
+        foreach my $set (@$sets) {
+
+            # Sets of other fields ("${selectField}_x_1") aren't numbers
+            next unless ( $test->( substr( $set, length($prefix) ) ) );
+            my @keys = eval { $redisObj->smembers($set) };
+            if ($@) {
+                next if ( $@ =~ /WRONGTYPE/ );
+                die $@;
+            }
+
+            # Don't read or clean keys that may belong to another app
+            @keys = grep {
+                      $_
+                  and !exists $res{$_}
+                  and $class->isLlngKey( $args, $_ )
+            } @keys;
+            next unless (@keys);
+
+            # MGET returns undef for missing keys and keys that aren't strings
+            my @values = eval { $redisObj->mget(@keys) };
+            if ($@) {
+                print STDERR "Error when reading index $set: $@\n";
+                next;
+            }
+            foreach my $i ( 0 .. $#keys ) {
+                my ( $k, $tmp ) = ( $keys[$i], $values[$i] );
+                unless ($tmp) {
+
+                    # Lazy cleanup: remove orphan from index
+                    eval { $redisObj->eval( $SREM_ORPHAN, 2, $set, $k ) };
+                    next;
+                }
+                $tmp = eval { unserialize($tmp) };
+                if ( $@ or ref($tmp) ne 'HASH' ) {
+                    print STDERR "Error in session $k: "
+                      . ( $@ || "not a session\n" );
+                    next;
+                }
+
+                # The index may be stale: check the session itself
+                next unless ( $test->( $tmp->{$selectField} ) );
+                $res{$k} = $class->extractFields( $tmp, @fields );
+            }
+        }
+        $cursor = $new_cursor;
+    } while ( $cursor != 0 );
+    return \%res;
+}
+
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
     my $deleted  = 0;
@@ -353,6 +465,51 @@ Apache::Session::browseable provides some class methods to manipulate all
 sessions and add the capability to index some fields to make research faster.
 
 This module use either L<Redis::Fast> or L<Redis>.
+
+=head1 searchLt() AND searchGt()
+
+  # Sessions where _oidcRtUpdate < $time (or > $time)
+  my $hash = Apache::Session::Browseable::Redis->searchLt(
+      $args, '_oidcRtUpdate', $time );
+  $hash = Apache::Session::Browseable::Redis->searchGt(
+      $args, '_oidcRtUpdate', $time, 'uid', 'client_id' );
+
+They return sessions whose field is strictly lower (or greater) than the
+given value, like L<searchOn()|/SYNOPSIS>: C<{ id =E<gt> session }>, or only
+the requested fields. The comparison is numeric.
+
+Leading and trailing spaces of the value are removed, then it must match
+C</^-?[0-9]+(?:\.[0-9]+)?\z/>. Otherwise, an error is
+printed on STDERR and an empty hash is returned.
+
+Sessions where the field is missing, empty or not a number (same check as the
+value, so C<Inf> or C<1e3> are skipped) are never returned. Note that the Perl
+fallback of Lemonldap::NG, used with backends that don't provide these
+methods, compares a missing field as 0.
+
+If the field isn't listed in C<Index>, all sessions are read and decoded. If
+it is, Redis still walks the whole keyspace (C<SCAN ... MATCH field_*>), but
+server-side: only the index sets of this field (C<field_value> keys) are
+returned, and only the sessions of sets holding a matching value are read.
+Orphan entries of these sets are removed; keys that don't match C<keysRe>
+are ignored.
+
+For the Lemonldap::NG purge of OpenID Connect refresh tokens, add
+C<_oidcRtUpdate> to C<Index>. Sessions stored before a field is added to
+C<Index> are not in its index until they are saved again, and refresh tokens
+are saved only when used: inactive ones won't be found by C<searchLt()> and
+will only be purged when C<_utime> expires. To index them at once, re-save
+them:
+
+  my $rt = Apache::Session::Browseable::Redis->get_key_from_all_sessions(
+      $args, sub { $_[0]->{_oidcRtUpdate} } );
+  foreach my $id ( keys %$rt ) {
+      tie my %s, 'Apache::Session::Browseable::Redis', $id, $args;
+      $s{_oidcRtUpdate} = $s{_oidcRtUpdate};
+      untie %s;
+  }
+
+This also refreshes their C<TTL>, if any.
 
 =head1 SEE ALSO
 

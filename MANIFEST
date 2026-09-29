@@ -53,6 +53,7 @@ t/Apache-Session-Browseable-PgJSON.t
 t/Apache-Session-Browseable-populate.t
 t/Apache-Session-Browseable-Postgres.t
 t/Apache-Session-Browseable-Redis.t
+t/Apache-Session-Browseable-Redis-searchLtGt.t
 t/Apache-Session-Browseable-Serialize-JSON.t
 t/Apache-Session-Browseable-SQLite.t
 t/Apache-Session-Browseable-Store-DBI.t

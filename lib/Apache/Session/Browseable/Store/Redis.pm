@@ -201,7 +201,8 @@ Optional. If set, session keys will be stored with a Redis TTL (in seconds)
 using C<SET key value EX ttl>. The TTL is refreshed on every update. This
 acts as a safety net: sessions are automatically removed by Redis if the
 application fails to delete them. Index sets are not expired by Redis, but
-orphan index entries will be cleaned up by C<searchOn> or manual maintenance.
+orphan index entries will be cleaned up by C<searchOn>, C<searchOnExpr>,
+C<searchLt>, C<searchGt> or manual maintenance.
 
 Without this option, session keys have no expiration and must be explicitly
 deleted or purged.
