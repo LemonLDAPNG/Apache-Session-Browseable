@@ -9,12 +9,15 @@ run_tests(
     table  => 'asb_test_mysql',
     create => [
         'CREATE TABLE __TABLE__ (id varchar(64) not null primary key,'
-          . ' a_session text, uid varchar(64), _whatToTrace varchar(64),'
-          . ' _session_kind varchar(64), _utime bigint, _lastSeen bigint)',
+          . ' a_session text, uid varchar(64) COLLATE utf8mb4_bin,'
+          . ' _whatToTrace varchar(64) COLLATE utf8mb4_bin,'
+          . ' _session_kind varchar(64) COLLATE utf8mb4_bin,'
+          . ' _utime bigint, _lastSeen bigint)',
         'CREATE INDEX u1 ON __TABLE__ (_utime)',
         'CREATE INDEX ls1 ON __TABLE__ (_lastSeen)',
         'CREATE INDEX uid1 ON __TABLE__ (_whatToTrace) USING BTREE',
     ],
+    exact => 1,
     index => 'uid _whatToTrace _session_kind _utime _lastSeen',
     todo  => {
         searchOnExprQuote => 'quotes are doubled although the value is bound',

@@ -47,11 +47,11 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
   CREATE TABLE sessions (
       id varchar(64) not null primary key,
       a_session text,
-      _whatToTrace varchar(255),
-      _session_kind varchar(32),
+      _whatToTrace varchar(255) COLLATE utf8mb4_bin,
+      _session_kind varchar(32) COLLATE utf8mb4_bin,
       _utime bigint,
       _lastSeen bigint,
-      ipAddr varchar(64)
+      ipAddr varchar(64) COLLATE utf8mb4_bin
   );
 
 Add indexes:
@@ -70,6 +70,19 @@ C<_lastSeen> column and index are needed when Lemonldap::NG "timeoutActivity"
 is used: sessions purge then calls deleteIfLowerThan() on C<_utime> and
 C<_lastSeen>, which does nothing unless both fields are in C<Index> (purge
 then falls back to reading all sessions).
+
+Searches must be exact (case and accent sensitive). Text columns listed in
+C<Index> must use the C<utf8mb4_bin> collation: otherwise, searches on indexed
+fields follow the table collation (case and accent insensitive with
+C<utf8mb4_0900_ai_ci>, the default of MySQL 8) whereas searches on other fields
+are done by Perl and are always exact. Without C<utf8mb4_bin>,
+C<searchOn($args, '_whatToTrace', 'DWHO')> would find the session of C<dwho>.
+To fix an existing table:
+
+  ALTER TABLE sessions
+      MODIFY _whatToTrace varchar(255) COLLATE utf8mb4_bin,
+      MODIFY _session_kind varchar(32) COLLATE utf8mb4_bin,
+      MODIFY ipAddr varchar(64) COLLATE utf8mb4_bin;
 
 With strict SQL mode (default since MySQL 5.7), storing a value longer than
 its column fails, so the whole session can't be saved: size C<varchar>
