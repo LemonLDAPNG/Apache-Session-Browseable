@@ -45,6 +45,18 @@ sub _searchOnQuery {
     ( my $q = $field ) =~ s/'/''/g;
     my $f = "a_session ->> '$q'";
 
+    # A caller may pass the UTF-8 bytes of a non-ASCII value without the UTF-8
+    # flag: to_json() would then read them as Latin-1 and the JSON document
+    # wouldn't match the stored value. Decode them once, here, so that the
+    # document and the recheck use the same characters.
+    if ( defined($value)
+        and !utf8::is_utf8($value)
+        and $value =~ /[\x80-\xff]/ )
+    {
+        my $decoded = $value;
+        $value = $decoded if ( utf8::decode($decoded) );
+    }
+
     # "->>" returns arrays and objects as JSON text; jsonb rejects NUL
     return { query => "$f =?", values => [$value] }
       unless ( $args->{GinIndex}
