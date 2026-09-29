@@ -5,7 +5,8 @@ use AutoLoader 'AUTOLOAD';
 
 our $VERSION = '1.2.2';
 
-# Number of sessions read per query by _forEachSession()
+# Number of sessions read per query by _forEachSession(). Values outside
+# 1..1_000_000 fall back to the default (a huge value would break LIMIT)
 our $BatchSize = 1000;
 
 sub _tabInTab {
@@ -40,7 +41,8 @@ sub _unserializer {
 # memory. No server-side cursor here: $sub may reuse the database handle.
 sub _forEachSession {
     my ( $class, $dbh, $table_name, $sub ) = @_;
-    my $limit = ( $BatchSize // '' ) =~ /^\s*([1-9][0-9]*)\s*\z/ ? $1 : 1000;
+    my ($limit) = ( $BatchSize // '' ) =~ /^\s*([1-9][0-9]*)\s*\z/;
+    $limit = 1000 if ( !$limit or $limit > 1_000_000 );
     my $sql   = "SELECT id,a_session FROM $table_name";
     unless ( $dbh->{Driver}->{Name} =~ /^(?:Pg|mysql|MariaDB|SQLite)\z/ ) {
         my $sth = $dbh->prepare_cached($sql);
