@@ -83,20 +83,26 @@ for example a MySQL C<json> column) is first decoded as UTF-8 JSON; if it is
 not valid UTF-8, it is read as characters.
 
 Some stores return Latin-1 bytes instead: files when the session holds only
-Latin-1 characters, and Redis, which can't store other characters. A Latin-1
-session that is also valid UTF-8 is then read as UTF-8: for example "Ã©"
-becomes "é". This needs every non-ASCII character of the session to be part
-of such a sequence (mostly values that are already mojibake). The Redis
-backend avoids it with C<unserializeLatin1()>, which skips the UTF-8 decode.
+Latin-1 characters, SQLite without C<sqlite_unicode>, and MySQL C<json> or
+C<text> columns holding data written by an old node using JSON::PP. A
+Latin-1 session that is also valid UTF-8 is then read as UTF-8: for example
+"Ã©" becomes "é". This needs every non-ASCII character of the session to be
+part of such a sequence, that is bytes C2-DF followed by 80-BF, or a valid
+UTF-8 sequence formed over the whole session (mostly values that are already
+mojibake). Redis is not affected: it stores Latin-1 but reads it with
+C<unserializeLatin1()>, which skips the UTF-8 decode.
 
 =head1 UPGRADE
 
-Previous versions read UTF-8 bytes returned by the store as Latin-1. The
-serialized data is unchanged, so they still read sessions as they did
-before. But a session rewritten by a previous version during a rolling
-upgrade keeps the double-encoded values it read, and sessions already
-corrupted this way are not repaired. Upgrade all servers sharing sessions
-(for Lemonldap::NG, all portals and handlers) together.
+Previous versions read UTF-8 bytes returned by the store as Latin-1. With
+JSON::XS the serialized data is unchanged, so they still read sessions as
+they did before. With JSON::PP the added C<utf8::upgrade()> changes the
+bytes stored by the DBD-based backends (a Latin-1 string becomes UTF-8), so
+an old node reading a session written by a new one sees mojibake. A session
+rewritten by a previous version during a rolling upgrade keeps the
+double-encoded values it read, and sessions already corrupted this way are
+not repaired. Upgrade all servers sharing sessions (for Lemonldap::NG, all
+portals and handlers) together.
 
 =head1 SEE ALSO
 
