@@ -187,7 +187,8 @@ sub get_key_from_all_sessions {
 }
 
 # Same arguments as in DBI.pm plus the database handle (needed to quote the
-# JSON path). Must match the documented generated columns
+# JSON path). The handle is optional: without one, _sqlField() quotes the path.
+# The expression must match the documented generated columns
 sub _buildLowerThanExpression {
     my ( $class, $field, $value, $dbh ) = @_;
     my $f = $class->_sqlField( $dbh, $field );
@@ -195,7 +196,8 @@ sub _buildLowerThanExpression {
 }
 
 # Build SQL expression to get a field from a_session. Field name is used as
-# JSON path member, quoted if needed
+# JSON path member, quoted if needed. The database handle is only used to
+# quote the path: it may be missing on the DBI deleteIfLowerThan() path
 sub _sqlField {
     my ( $class, $dbh, $field ) = @_;
     my $path;
@@ -206,7 +208,12 @@ sub _sqlField {
         ( my $f = $field ) =~ s/(["\\])/\\$1/g;
         $path = qq{\$."$f"};
     }
-    return 'a_session->>' . $dbh->quote($path);
+    return 'a_session->>' . $dbh->quote($path) if ( defined $dbh );
+
+    # No database handle: quote the path here (MySQL escapes backslashes)
+    $path =~ s/\\/\\\\/g;
+    $path =~ s/'/''/g;
+    return "a_session->>'$path'";
 }
 
 # Build the SELECT list for the given fields. Column aliases are generated

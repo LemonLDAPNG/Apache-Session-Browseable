@@ -16,7 +16,8 @@ use Test::More;
 }
 my $dbh = FakeDbh->new;
 
-# The database handle is only used by MySQLJSON
+# The database handle is optional: MySQLJSON needs it to quote the JSON path,
+# but the DBI deleteIfLowerThan() path doesn't provide one
 my @tests = (
     [ 'Postgres', '_utime', 'cast(_utime as bigint) < 200' ],
     [ 'MySQL',    '_utime', '_utime < 200' ],
@@ -48,6 +49,18 @@ foreach (@tests) {
         skip "$class can't be loaded", 1 unless ( eval "require $class" );
         is( $class->_buildLowerThanExpression( $field, 200, $dbh ),
             $expected, "$backend: $field" );
+    }
+}
+
+# MySQLJSON must build the same expression without a database handle
+foreach (@tests) {
+    my ( $backend, $field, $expected ) = @$_;
+    next unless ( $backend eq 'MySQLJSON' );
+    my $class = "Apache::Session::Browseable::$backend";
+  SKIP: {
+        skip "$class can't be loaded", 1 unless ( eval "require $class" );
+        is( $class->_buildLowerThanExpression( $field, 200 ),
+            $expected, "$backend: $field without database handle" );
     }
 }
 
