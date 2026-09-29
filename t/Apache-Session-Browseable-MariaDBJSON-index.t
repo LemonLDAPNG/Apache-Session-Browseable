@@ -43,6 +43,8 @@ is( $@, '', 'generated column accepted' );
 is( $dbh->{prepares}, 1, 'one information_schema query' );
 eval { $class->_checkIndex( $dbh, $args ) };
 is( $dbh->{prepares}, 1, 'result is memoized' );
+ok( $dbh->{private_asb_mariadbjson_index},
+    'memoized on a DBI private attribute' );
 
 # A column that exists but is not generated (migration from Browseable::MySQL)
 # must fail instead of silently returning nothing

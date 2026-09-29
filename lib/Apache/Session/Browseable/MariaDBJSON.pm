@@ -51,7 +51,9 @@ sub _checkIndex {
     return unless (@$index);
 
     my $table = $args->{TableName} || $Apache::Session::Store::DBI::TableName;
-    my $checked = $dbh->{asb_mariadbjson_index} ||= {};
+
+    # DBI only keeps private_* attributes
+    my $checked = $dbh->{private_asb_mariadbjson_index} ||= {};
     return if ( $checked->{$table} );
 
     my $sth = $dbh->prepare(
