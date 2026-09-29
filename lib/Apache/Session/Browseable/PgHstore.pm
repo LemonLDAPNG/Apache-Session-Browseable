@@ -137,7 +137,7 @@ sub get_key_from_all_sessions {
     # Special case if all wanted fields are indexed
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
-        my $fields = join ',',
+        my $fields = join ',', 'id',
           map { $class->_sqlField($_) . ' AS ' . $class->_sqlAlias($_) } @$data;
         $sth = $dbh->prepare("SELECT $fields from $table_name");
         $sth->execute;
@@ -149,18 +149,24 @@ sub get_key_from_all_sessions {
     while ( my @row = $sth->fetchrow_array ) {
         no strict 'refs';
         my $self = eval "&${class}::populate();";
-        my $sub  = $self->{unserialize};
-        my $tmp  = &$sub( { serialized => $row[1] } );
-        if ( ref($data) eq 'CODE' ) {
-            $tmp = &$data( $tmp, $row[0] );
-            $res{ $row[0] } = $tmp if ( defined($tmp) );
-        }
-        elsif ($data) {
-            $data = [$data] unless ( ref($data) );
-            $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
-        }
-        else {
-            $res{ $row[0] } = $tmp;
+        eval {
+            my $sub = $self->{unserialize};
+            my $tmp = &$sub( { serialized => $row[1] } );
+            if ( ref($data) eq 'CODE' ) {
+                $tmp = &$data( $tmp, $row[0] );
+                $res{ $row[0] } = $tmp if ( defined($tmp) );
+            }
+            elsif ($data) {
+                $data = [$data] unless ( ref($data) );
+                $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
+            }
+            else {
+                $res{ $row[0] } = $tmp;
+            }
+        };
+        if ($@) {
+            print STDERR "Error in session $row[0]: $@\n";
+            delete $res{ $row[0] };
         }
     }
     return \%res;
