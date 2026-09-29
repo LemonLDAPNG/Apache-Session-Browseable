@@ -134,6 +134,27 @@ sub run_tests {
     is_deeply( $session{list}, [ 1, 2 ], 'Array retrieved' );
     untie %session;
 
+    # Non-ASCII values, in Latin-1 range and beyond
+    foreach my $v ( "\x{c9}lodie", "\x{c9}lodie \x{3a9}" ) {
+        ( my $l = $v ) =~ s/[^ -~]/?/g;
+        my $u8 = $newSession->( uid => 'u8', cn => $v, list => [$v] );
+        tie %session, $class, $u8, $args;
+        is( $session{cn}, $v, "Value $l retrieved" );
+        is_deeply( $session{list}, [$v], "Array with $l retrieved" );
+        untie %session;
+        my $r = $class->get_key_from_all_sessions($args);
+        is( $r->{$u8}->{cn}, $v, "get_key_from_all_sessions returns $l" );
+        $r = $class->get_key_from_all_sessions( $args, sub { $_[0]->{cn} } );
+        is( $r->{$u8}, $v, "get_key_from_all_sessions with a code ref: $l" );
+        $r = $class->get_key_from_all_sessions( $args, ['cn'] );
+        is( $r->{$u8}->{cn}, $v, "get_key_from_all_sessions with fields: $l" );
+        $r = $class->searchOn( $args, 'uid', 'u8' );
+        is( $r->{$u8}->{cn}, $v, "searchOn without fields returns $l" );
+        $r = $class->searchOn( $args, 'uid', 'u8', 'cn' );
+        is( $r->{$u8}->{cn}, $v, "searchOn with fields returns $l" );
+        $dbh->do( "DELETE FROM $table WHERE id=?", undef, $u8 );
+    }
+
     $reset->();
 
     # searchOn
