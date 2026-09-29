@@ -25,10 +25,11 @@ sub populate {
     return $self;
 }
 
-# Override default CAST syntax from DBI.pm
+# No CAST (default in DBI.pm): MySQL converts values implicitly and a CAST
+# prevents the use of an index on the field
 sub _buildLowerThanExpression {
     my ( $class, $field, $value ) = @_;
-    return "CAST($field AS SIGNED INTEGER) < $value";
+    return "$field < $value";
 }
 
 1;
