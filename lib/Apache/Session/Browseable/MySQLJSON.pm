@@ -128,11 +128,9 @@ sub get_key_from_all_sessions {
     $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
     $sth->execute;
     my %res;
+    my $sub = $class->_unserializer;
     while ( my @row = $sth->fetchrow_array ) {
-        no strict 'refs';
-        my $self = eval "&${class}::populate();";
         eval {
-            my $sub = $self->{unserialize};
             my $tmp = &$sub( { serialized => $row[1] } );
             if ( ref($data) eq 'CODE' ) {
                 $tmp = &$data( $tmp, $row[0] );

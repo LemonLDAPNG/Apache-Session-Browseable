@@ -5,6 +5,7 @@ use strict;
 use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::Postgres;
+use Apache::Session::Browseable::_common;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::Hstore;
 
@@ -71,8 +72,7 @@ sub _query {
         }
     }
     else {
-        my $self = eval "&${class}::populate();";
-        my $sub  = $self->{unserialize};
+        my $sub = Apache::Session::Browseable::_common::_unserializer($class);
         foreach my $s ( keys %$res ) {
             eval {
                 my $tmp = &$sub( { serialized => $res->{$s}->{a_session} } );
@@ -141,11 +141,9 @@ sub get_key_from_all_sessions {
     $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
     $sth->execute;
     my %res;
+    my $sub = Apache::Session::Browseable::_common::_unserializer($class);
     while ( my @row = $sth->fetchrow_array ) {
-        no strict 'refs';
-        my $self = eval "&${class}::populate();";
-        my $sub  = $self->{unserialize};
-        my $tmp  = &$sub( { serialized => $row[1] } );
+        my $tmp = &$sub( { serialized => $row[1] } );
         if ( ref($data) eq 'CODE' ) {
             $tmp = &$data( $tmp, $row[0] );
             $res{ $row[0] } = $tmp if ( defined($tmp) );
