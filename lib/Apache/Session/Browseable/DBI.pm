@@ -70,10 +70,8 @@ sub _query {
           $dbh->prepare(
             "SELECT id,a_session from $table_name where $query->{query}");
         $sth->execute( @{ $query->{values} } );
+        my $sub = $class->_unserializer;
         while ( my @row = $sth->fetchrow_array ) {
-            no strict 'refs';
-            my $self = eval "&${class}::populate();";
-            my $sub  = $self->{unserialize};
             eval {
                 my $tmp = &$sub( { serialized => $row[1] } );
                 if (@fields) {
@@ -194,11 +192,9 @@ sub get_key_from_all_sessions {
           }
         : undef
     );
+    my $sub = $class->_unserializer;
     while ( my @row = $sth->fetchrow_array ) {
-        no strict 'refs';
-        my $self = eval "&${class}::populate();";
         eval {
-            my $sub = $self->{unserialize};
             my $tmp = &$sub( { serialized => $row[1] }, $next );
             if ( ref($data) eq 'CODE' ) {
                 $tmp = &$data( $tmp, $row[0] );

@@ -44,6 +44,13 @@ sub _checkThresholds {
     return 1;
 }
 
+# Get the unserialize sub of a class
+sub _unserializer {
+    my ($class) = @_;
+    no strict 'refs';
+    return &{"${class}::populate"}()->{unserialize};
+}
+
 1;
 __END__
 

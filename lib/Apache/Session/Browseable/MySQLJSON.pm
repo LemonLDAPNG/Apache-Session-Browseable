@@ -68,8 +68,7 @@ sub _query {
     my $res = $sth->fetchall_hashref('id') or return {};
     $class->_renameAliases( $res, $aliases );
     unless (@fields) {
-        my $self = eval "&${class}::populate();";
-        my $sub  = $self->{unserialize};
+        my $sub = $class->_unserializer;
         foreach my $s ( keys %$res ) {
             eval {
                 my $tmp = &$sub( { serialized => $res->{$s}->{a_session} } );
@@ -150,11 +149,9 @@ sub get_key_from_all_sessions {
     $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
     $sth->execute;
     my %res;
+    my $sub = $class->_unserializer;
     while ( my @row = $sth->fetchrow_array ) {
-        no strict 'refs';
-        my $self = eval "&${class}::populate();";
         eval {
-            my $sub = $self->{unserialize};
             my $tmp = &$sub( { serialized => $row[1] } );
             if ( ref($data) eq 'CODE' ) {
                 $tmp = &$data( $tmp, $row[0] );
