@@ -89,6 +89,14 @@ becomes "é". This needs every non-ASCII character of the session to be part
 of such a sequence (mostly values that are already mojibake). The Redis
 backend avoids it with C<unserializeLatin1()>, which skips the UTF-8 decode.
 
+=head1 UPGRADE
+
+Previous versions read UTF-8 bytes returned by the store as Latin-1. The
+serialized data is unchanged, so they still read sessions as they did
+before. But a session rewritten by a previous version during a rolling
+upgrade keeps the double-encoded values it read, and sessions already
+corrupted this way are not repaired. Upgrade all servers sharing sessions
+(for Lemonldap::NG, all portals and handlers) together.
 
 =head1 SEE ALSO
 
