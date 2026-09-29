@@ -136,6 +136,12 @@ Use it with Perl:
        Index      => '_whatToTrace _session_kind _utime _lastSeen ipAddr',
   };
 
+The DSN selects the driver: C<dbi:MariaDB:...> requires DBD::MariaDB and
+C<dbi:mysql:...> requires DBD::mysql, otherwise DBI dies with
+C<install_driver(...) failed>. DBD::MariaDB always exchanges UTF-8, whereas
+with DBD::mysql this module sets C<mysql_enable_utf8>, which selects utf8mb3:
+a character outside the BMP (an emoji) can then not be found.
+
 Use it like L<Apache::Session::Browseable::MySQL>.
 
 =head2 Generated columns
