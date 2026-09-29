@@ -29,12 +29,19 @@ sub _fieldIsIndexed {
 # be numbers
 sub _checkThresholds {
     my ( $class, $rule ) = @_;
-    my $thresholds = $rule->{or} || $rule->{and};
-    return 1 unless ($thresholds);
-    unless ( ref($thresholds) eq 'HASH' ) {
+    unless ( ref($rule) eq 'HASH' ) {
         print STDERR "deleteIfLowerThan: rule must be a hash reference\n";
         return 0;
     }
+    foreach my $type (qw(or and not)) {
+        next unless defined $rule->{$type};
+        unless ( ref( $rule->{$type} ) eq 'HASH' ) {
+            print STDERR "deleteIfLowerThan: $type must be a hash reference\n";
+            return 0;
+        }
+    }
+    my $thresholds = $rule->{or} || $rule->{and};
+    return 1 unless ($thresholds);
     foreach ( values %$thresholds ) {
         unless ( defined($_) and /^-?[0-9]+(?:\.[0-9]+)?\z/ ) {
             print STDERR "deleteIfLowerThan: threshold must be a number\n";

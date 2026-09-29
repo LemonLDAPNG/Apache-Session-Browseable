@@ -63,6 +63,16 @@ sub quiet(&) {
     return $code->();
 }
 
+# Like quiet(), but also returns what was written to STDERR
+sub quiet_err(&) {
+    my ($code) = @_;
+    local *STDERR;
+    my $err = '';
+    open STDERR, '>', \$err;
+    my $res = $code->();
+    return ( $res, $err );
+}
+
 my ( $ids, $res, @res );
 
 # 1. deleteIfLowerThan with "or"
@@ -256,6 +266,49 @@ quiet {
     }
 };
 is_deeply( $qargs->{Index}, [ 'uid', "a'b" ], 'Store: Index not modified' );
+
+# 10. empty or invalid "not" in the rule
+$ids = reset_sessions(
+    old => { _utime => 100, _session_kind => 'SSO' },
+    new => { _utime => 300, _session_kind => 'SSO' },
+);
+my ( $ret, $err ) = quiet_err {
+    eval {
+        $class->deleteIfLowerThan( $args,
+            { or => { _utime => 200 }, not => {} } );
+    };
+};
+is( $ret, 1, 'empty not: returns 1' ) or diag $@;
+is( $err, '', 'empty not: no warning' );
+is( remaining($ids), 'new', 'empty not: clause ignored' );
+
+foreach my $bad ( 'x', [ _session_kind => 'y' ], \'x' ) {
+    ( $ret, $err ) = quiet_err {
+        eval {
+            $class->deleteIfLowerThan( $args,
+                { or => { _utime => 200 }, not => $bad } );
+        };
+    };
+    is( $ret, 0,
+        '"not" is not a hash ref (' . ( ref($bad) || $bad ) . '): returns 0' )
+      or diag $@;
+    like( $err, qr/not must be a hash reference/,
+        '"not" is not a hash ref (' . ( ref($bad) || $bad ) . '): warning' );
+}
+foreach my $bad ( 'x', [ _utime => 200 ], \'x', undef ) {
+    ( $ret, $err ) =
+      quiet_err { eval { $class->deleteIfLowerThan( $args, $bad ) } };
+    is( $ret, 0,
+        'rule is not a hash ref ('
+          . ( ref($bad) || ( defined $bad ? $bad : 'undef' ) )
+          . '): returns 0' )
+      or diag $@;
+    like( $err, qr/rule must be a hash reference/,
+        'rule is not a hash ref ('
+          . ( ref($bad) || ( defined $bad ? $bad : 'undef' ) )
+          . '): warning' );
+}
+is( remaining($ids), 'new', 'invalid rule: nothing deleted' );
 
 done_testing();
 
