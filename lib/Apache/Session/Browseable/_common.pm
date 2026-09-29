@@ -47,11 +47,11 @@ sub _checkThresholds {
     return 1;
 }
 
-# Get the unserialize sub of a class
+# Get the unserialize sub of a class (populate() may be inherited)
 sub _unserializer {
     my ($class) = @_;
-    no strict 'refs';
-    return &{"${class}::populate"}()->{unserialize};
+    my $p = $class->can('populate') or die "$class has no populate()\n";
+    return $p->()->{unserialize};
 }
 
 # Call $sub->( $id, $serialized ) for each session. If the driver supports
