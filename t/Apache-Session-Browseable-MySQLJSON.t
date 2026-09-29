@@ -11,18 +11,22 @@ run_tests(
     create => [
             'CREATE TABLE __TABLE__ (id varchar(64) not null primary key,'
           . ' a_session json,'
-          . " as_wt varchar(255) AS (a_session->>'\$._whatToTrace') VIRTUAL,"
-          . " as_sk varchar(32) AS (a_session->>'\$._session_kind') VIRTUAL,"
+          . ' as_wt varchar(255) COLLATE utf8mb4_bin'
+          . " AS (a_session->>'\$._whatToTrace') VIRTUAL,"
+          . ' as_sk varchar(32) COLLATE utf8mb4_bin'
+          . " AS (a_session->>'\$._session_kind') VIRTUAL,"
           . ' as_ut bigint unsigned'
           . " AS (cast(a_session->>'\$._utime' as unsigned)) VIRTUAL,"
           . ' as_ls bigint unsigned'
           . " AS (cast(a_session->>'\$._lastSeen' as unsigned)) VIRTUAL,"
-          . " as_ip varchar(64) AS (a_session->>'\$.ipAddr') VIRTUAL,"
+          . ' as_ip varchar(64) COLLATE utf8mb4_bin'
+          . " AS (a_session->>'\$.ipAddr') VIRTUAL,"
           . ' KEY as_wt (as_wt), KEY as_sk (as_sk), KEY as_ut (as_ut),'
           . ' KEY as_ls (as_ls), KEY as_ip (as_ip)) ENGINE=InnoDB'
     ],
     json    => 1,
     null    => 1,
+    exact   => 1,
     weird   => [ "weird'field", 'a"b\\c', 'a?b', 'x\\' ],
     explain => sub {
         my ( $class, $dbh ) = @_;

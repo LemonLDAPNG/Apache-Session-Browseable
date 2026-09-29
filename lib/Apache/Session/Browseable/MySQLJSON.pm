@@ -253,13 +253,16 @@ indexes:
   CREATE TABLE sessions (
       id varchar(64) not null primary key,
       a_session json,
-      as_wt varchar(255) AS (a_session->>'$._whatToTrace') VIRTUAL,
-      as_sk varchar(32) AS (a_session->>'$._session_kind') VIRTUAL,
+      as_wt varchar(255) COLLATE utf8mb4_bin
+          AS (a_session->>'$._whatToTrace') VIRTUAL,
+      as_sk varchar(32) COLLATE utf8mb4_bin
+          AS (a_session->>'$._session_kind') VIRTUAL,
       as_ut bigint unsigned
           AS (cast(a_session->>'$._utime' as unsigned)) VIRTUAL,
       as_ls bigint unsigned
           AS (cast(a_session->>'$._lastSeen' as unsigned)) VIRTUAL,
-      as_ip varchar(64) AS (a_session->>'$.ipAddr') VIRTUAL,
+      as_ip varchar(64) COLLATE utf8mb4_bin
+          AS (a_session->>'$.ipAddr') VIRTUAL,
       KEY as_wt (as_wt),
       KEY as_sk (as_sk),
       KEY as_ut (as_ut),
@@ -272,6 +275,11 @@ same expression, so keep these expressions exactly as written: they are the
 ones used by this module (C<-E<gt>E<gt>> returns unquoted values whereas
 C<-E<gt>> keeps JSON quotes). MySQL doesn't use them for C<LIKE> queries, so
 searchOnExpr() always scans the table.
+
+Searches are exact (case and accent sensitive). Generated text columns must
+use the C<utf8mb4_bin> collation: otherwise, searches on indexed fields follow
+the table collation (case and accent insensitive with C<utf8mb4_0900_ai_ci>,
+the default of MySQL 8) whereas searches on other fields don't.
 
 C<as_ls> is needed when Lemonldap::NG "timeoutActivity" is used: sessions purge
 then deletes sessions whose C<_utime> B<or> C<_lastSeen> is too old, and an
@@ -293,13 +301,16 @@ never used. To fix an existing table, drop those you created:
 then create the new ones:
 
   ALTER TABLE sessions
-      ADD COLUMN as_wt varchar(255) AS (a_session->>'$._whatToTrace') VIRTUAL,
-      ADD COLUMN as_sk varchar(32) AS (a_session->>'$._session_kind') VIRTUAL,
+      ADD COLUMN as_wt varchar(255) COLLATE utf8mb4_bin
+          AS (a_session->>'$._whatToTrace') VIRTUAL,
+      ADD COLUMN as_sk varchar(32) COLLATE utf8mb4_bin
+          AS (a_session->>'$._session_kind') VIRTUAL,
       ADD COLUMN as_ut bigint unsigned
           AS (cast(a_session->>'$._utime' as unsigned)) VIRTUAL,
       ADD COLUMN as_ls bigint unsigned
           AS (cast(a_session->>'$._lastSeen' as unsigned)) VIRTUAL,
-      ADD COLUMN as_ip varchar(64) AS (a_session->>'$.ipAddr') VIRTUAL,
+      ADD COLUMN as_ip varchar(64) COLLATE utf8mb4_bin
+          AS (a_session->>'$.ipAddr') VIRTUAL,
       ADD KEY as_wt (as_wt), ADD KEY as_sk (as_sk),
       ADD KEY as_ut (as_ut), ADD KEY as_ls (as_ls), ADD KEY as_ip (as_ip);
 
