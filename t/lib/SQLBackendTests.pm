@@ -10,6 +10,7 @@ package SQLBackendTests;
 #  - index:   indexed fields (DBI based backends, one column per field)
 #  - json:    1 if any field can be queried (JSON/Hstore backends)
 #  - weird:   field names that need quoting (JSON/Hstore backends)
+#  - null:    1 if a field can be stored as JSON null (JSON backends)
 #  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - corrupt: a_session value that can't be unserialized
 
@@ -269,6 +270,18 @@ sub run_tests {
         'deleteIfLowerThan "not": session without field deleted' );
 
     $reset->();
+    @r = $class->deleteIfLowerThan(
+        $args,
+        {
+            and => { _utime        => 200, _lastSeen => 400 },
+            not => { _session_kind => 'Persistent' }
+        }
+    );
+    is_deeply( \@r, [ 1, 2 ], 'deleteIfLowerThan "and" with "not"' );
+    is( $remaining->(), 'obrien,rtyler',
+        'deleteIfLowerThan "and" with "not": right sessions kept' );
+
+    $reset->();
     my $rule = { or => { _utime => 400 }, not => { uid => "O'Brien" } };
     @r = $class->deleteIfLowerThan( $args, $rule );
     is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan "not" with a quote' );
@@ -298,6 +311,21 @@ sub run_tests {
             "deleteIfLowerThan with threshold '$bad' returns 0" );
     }
     is( $remaining->(), 'dwho,nokind,obrien,rtyler', 'Nothing deleted' );
+    foreach my $bad ( '200 OR 1=1', '1e3', '', "\x{0661}" ) {
+        ( my $label = $bad ) =~ s/[^ -~]/?/g;
+        @r = $quiet->(
+            sub {
+                eval {
+                    $class->deleteIfLowerThan( $args,
+                        { and => { _utime => 400, _lastSeen => $bad } } );
+                };
+            }
+        );
+        is_deeply( \@r, [0],
+            "deleteIfLowerThan \"and\" with threshold '$label' returns 0" );
+    }
+    is( $remaining->(), 'dwho,nokind,obrien,rtyler',
+        'Nothing deleted with "and"' );
 
     @r = $class->deleteIfLowerThan( $args, { or => { _utime => '100.5' } } );
     is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan with a decimal threshold' );
@@ -308,6 +336,26 @@ sub run_tests {
             { or => { _utime => 400 }, not => { $w => 'w1' } } );
         is_deeply( \@r, [ 1, 3 ], "deleteIfLowerThan \"not\" on field [$w]" );
         is( $remaining->(), 'dwho', "deleteIfLowerThan \"not\" on field [$w]" );
+    }
+
+    # A field stored as JSON null does not protect a session
+    if ( $o{null} ) {
+        $reset->();
+        my $nullId = $newSession->( %{ $data{dwho} }, _session_kind => undef );
+        my $json =
+          $dbh->selectrow_array( "SELECT a_session FROM $table WHERE id=?",
+            undef, $nullId );
+        like(
+            $json,
+            qr/"_session_kind"\s*:\s*null/,
+            'Session with a JSON null field created'
+        );
+        @r = $class->deleteIfLowerThan( $args,
+            { or => { _utime => 200 }, not => { _session_kind => 'SSO' } } );
+        is_deeply( \@r, [ 1, 3 ],
+            'deleteIfLowerThan "not": JSON null deleted' );
+        is( $remaining->(), 'dwho,obrien',
+            'deleteIfLowerThan "not": right sessions kept' );
     }
 
     # PostgreSQL with standard_conforming_strings=off: backslashes are escape

@@ -13,6 +13,6 @@ run_tests(
     ],
     json    => 1,
     scs     => 1,
-    weird   => ["weird'field"],
+    weird   => [ "weird'field", 'a?b' ],
     corrupt => '"x"=>"_json://{bad"',
 );

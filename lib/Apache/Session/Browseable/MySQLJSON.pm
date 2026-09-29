@@ -59,18 +59,14 @@ sub _query {
       || $Apache::Session::Store::DBI::TableName;
 
     my $sth;
-    my $fields =
-      @fields
-      ? join( ',',
-        'id',
-        map { $class->_sqlField( $dbh, $_ ) . ' AS ' . $class->_sqlAlias($_) }
-          @fields )
-      : 'id,a_session';
+    my ( $fields, $aliases ) = ( 'id,a_session', {} );
+    ( $fields, $aliases ) = $class->_sqlSelect( $dbh, @fields ) if (@fields);
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
     $sth->execute( @{ $query->{values} } );
 
     my $res = $sth->fetchall_hashref('id') or return {};
+    $class->_renameAliases( $res, $aliases );
     unless (@fields) {
         my $self = eval "&${class}::populate();";
         my $sub  = $self->{unserialize};
@@ -144,12 +140,12 @@ sub get_key_from_all_sessions {
     # Special case if all wanted fields are indexed
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
-        my $fields = join ',', 'id',
-          map { $class->_sqlField( $dbh, $_ ) . ' AS ' . $class->_sqlAlias($_) }
-          @$data;
+        my ( $fields, $aliases ) = $class->_sqlSelect( $dbh, @$data );
         $sth = $dbh->prepare("SELECT $fields from $table_name");
         $sth->execute;
-        return $sth->fetchall_hashref('id');
+        my $res = $sth->fetchall_hashref('id');
+        $class->_renameAliases( $res, $aliases );
+        return $res;
     }
     $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
     $sth->execute;
@@ -195,11 +191,30 @@ sub _sqlField {
     return 'a_session->>' . $dbh->quote($path);
 }
 
-# Build a column alias that preserves field name case
-sub _sqlAlias {
-    my ( $class, $field ) = @_;
-    $field =~ s/`/``/g;
-    return "`$field`";
+# Build the SELECT list for the given fields. Column aliases are generated
+# (a field name may contain "?", which DBD::mysql takes for a placeholder even
+# inside backquotes): returns the list and an alias => field name hash
+sub _sqlSelect {
+    my ( $class, $dbh, @fields ) = @_;
+    my ( @select, %aliases );
+    foreach my $field (@fields) {
+        my $alias = 'f' . scalar(@select);
+        $aliases{$alias} = $field;
+        push @select, $class->_sqlField( $dbh, $field ) . " AS `$alias`";
+    }
+    return ( join( ',', 'id', @select ), \%aliases );
+}
+
+# Replace generated aliases by field names in results
+sub _renameAliases {
+    my ( $class, $res, $aliases ) = @_;
+    return unless (%$aliases);
+    foreach my $row ( values %$res ) {
+        %$row = (
+            ( map { $aliases->{$_} => $row->{$_} } keys %$aliases ),
+            id => $row->{id}
+        );
+    }
 }
 
 sub _classDbh {

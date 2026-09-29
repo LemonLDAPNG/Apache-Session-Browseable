@@ -11,6 +11,7 @@ run_tests(
 'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session jsonb)'
     ],
     json  => 1,
-    weird => [ "weird'field", 'a"b\\c' ],
+    null  => 1,
+    weird => [ "weird'field", 'a"b\\c', 'a?b', 'x\\' ],
     scs   => 1,
 );
