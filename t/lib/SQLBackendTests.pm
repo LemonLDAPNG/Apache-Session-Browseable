@@ -11,6 +11,7 @@ package SQLBackendTests;
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
+#  - exact:   1 to check that searches are case and accent sensitive
 #  - explain: sub( $class, $dbh ) returning a list of
 #             [ description, WHERE clause, index or array ref of indexes ]:
 #             the plan of each WHERE clause must use all these indexes
@@ -216,6 +217,35 @@ sub run_tests {
                 'searchOnExpr on a value containing a quote' );
         }
     );
+
+    # Case and accent sensitive searches, on indexed and non indexed fields
+    if ( $o{exact} ) {
+        my $uid = $newSession->(
+            %{ $data{dwho} },
+            uid          => "\x{c9}lodie",
+            _whatToTrace => "\x{c9}lodie",
+        );
+        foreach my $f (qw(_whatToTrace uid)) {
+            my $res = $class->searchOn( $args, $f, 'DWHO' );
+            is_deeply( $res, {}, "searchOn on $f is case sensitive" );
+            $res = $class->searchOnExpr( $args, $f, 'DW*' );
+            is_deeply( $res, {}, "searchOnExpr on $f is case sensitive" );
+            foreach my $v (qw(elodie ELODIE)) {
+                $res = $class->searchOn( $args, $f, $v );
+                is_deeply( $res, {}, "searchOn on $f: $v doesn't match" );
+                $res = $class->searchOnExpr( $args, $f, "$v*" );
+                is_deeply( $res, {}, "searchOnExpr on $f: $v* doesn't match" );
+            }
+
+            # Character string stored in UTF-8 (DBD::mysql sends other
+            # strings in Latin-1)
+            my $v = "\x{c9}lodie";
+            utf8::upgrade($v);
+            $res = $class->searchOn( $args, $f, $v );
+            is( $name->($res), $uid, "searchOn on $f: exact value found" );
+        }
+        $dbh->do( "DELETE FROM $table WHERE id=?", undef, $uid );
+    }
 
     # get_key_from_all_sessions
     $group->(
