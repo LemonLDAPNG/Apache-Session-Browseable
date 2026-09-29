@@ -33,37 +33,63 @@ sub unserialize {
     return $tmp->{data};
 }
 
+# Remove session KEYS[2] from index KEYS[1] only if it doesn't exist, in one
+# step: a concurrent writer may be recreating it
+our $SREM_ORPHAN = q{if redis.call('exists',KEYS[2])==0 then }
+  . q{return redis.call('srem',KEYS[1],KEYS[2]) end return 0};
+
+# Sessions of index set $set, except those in %$skip: { id => session }.
+# Members that may belong to another app are neither read nor removed
+sub _readIndex {
+    my ( $class, $args, $redisObj, $set, $skip ) = @_;
+    my @keys = eval { $redisObj->smembers($set) };
+    if ($@) {
+        return {} if ( $@ =~ /WRONGTYPE/ );
+        die $@;
+    }
+    @keys = grep {
+              $_
+          and !( $skip and exists $skip->{$_} )
+          and $class->isLlngKey( $args, $_ )
+    } @keys;
+    return {} unless (@keys);
+
+    # MGET returns undef for missing keys and keys that aren't strings
+    my @values = eval { $redisObj->mget(@keys) };
+    if ($@) {
+        print STDERR "Error when reading index $set: $@\n";
+        return {};
+    }
+    my %res;
+    foreach my $i ( 0 .. $#keys ) {
+        my ( $k, $tmp ) = ( $keys[$i], $values[$i] );
+        unless ($tmp) {
+
+            # Lazy cleanup: remove orphan from index
+            eval { $redisObj->eval( $SREM_ORPHAN, 2, $set, $k ) };
+            next;
+        }
+        $tmp = eval { unserialize($tmp) };
+        if ( $@ or ref($tmp) ne 'HASH' ) {
+            print STDERR "Error in session $k: " . ( $@ || "not a session\n" );
+            next;
+        }
+        $res{$k} = $tmp;
+    }
+    return \%res;
+}
+
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
 
     my %res = ();
     if ( $class->isIndexed( $args, $selectField ) ) {
 
-        my $redisObj  = $class->_getRedis($args);
-        my $index_key = "${selectField}_$value";
-        my @keys      = $redisObj->smembers($index_key);
-        foreach my $k (@keys) {
-            next unless ($k);
-            my $tmp = $redisObj->get($k);
-            unless ($tmp) {
-                # Lazy cleanup: remove orphan from index
-                eval { $redisObj->srem( $index_key, $k ) };
-                next;
-            }
-            eval {
-                $tmp = unserialize($tmp);
-                if (@fields) {
-                    $res{$k}->{$_} = $tmp->{$_} foreach (@fields);
-                }
-                else {
-                    $res{$k} = $tmp;
-                }
-            };
-            if ($@) {
-                print STDERR "Error in session $k: $@\n";
-                delete $res{$k};
-            }
-        }
+        my $redisObj = $class->_getRedis($args);
+        my $sessions =
+          $class->_readIndex( $args, $redisObj, "${selectField}_$value" );
+        $res{$_} = $class->extractFields( $sessions->{$_}, @fields )
+          foreach ( keys %$sessions );
     }
     else {
         $class->get_key_from_all_sessions(
@@ -97,20 +123,10 @@ sub searchOnExpr {
             my ( $new_cursor, $sets ) =
               $redisObj->scan( $cursor, MATCH => "${selectField}_$value" );
             foreach my $set (@$sets) {
-                next unless $redisObj->type($set) eq 'set';
-                my @keys = $redisObj->smembers($set);
-                foreach my $k (@keys) {
-                    my $v = $redisObj->get($k);
-                    unless ($v) {
-                        # Lazy cleanup: remove orphan from index
-                        eval { $redisObj->srem( $set, $k ) };
-                        next;
-                    }
-                    my $tmp = unserialize($v);
-                    if ($tmp) {
-                        $res{$k} = $class->extractFields( $tmp, @fields );
-                    }
-                }
+                my $sessions =
+                  $class->_readIndex( $args, $redisObj, $set, \%res );
+                $res{$_} = $class->extractFields( $sessions->{$_}, @fields )
+                  foreach ( keys %$sessions );
             }
             $cursor = $new_cursor;
         } while ( $cursor != 0 );
@@ -141,11 +157,6 @@ sub searchGt {
     my $class = shift;
     return $class->_searchCompare( '>', @_ );
 }
-
-# Remove session KEYS[2] from index KEYS[1] only if it doesn't exist, in one
-# step: a concurrent writer may be recreating it
-our $SREM_ORPHAN = q{if redis.call('exists',KEYS[2])==0 then }
-  . q{return redis.call('srem',KEYS[1],KEYS[2]) end return 0};
 
 # Trimmed number, or undef
 sub _number {
@@ -199,44 +210,12 @@ sub _searchCompare {
 
             # Sets of other fields ("${selectField}_x_1") aren't numbers
             next unless ( $test->( substr( $set, length($prefix) ) ) );
-            my @keys = eval { $redisObj->smembers($set) };
-            if ($@) {
-                next if ( $@ =~ /WRONGTYPE/ );
-                die $@;
-            }
-
-            # Don't read or clean keys that may belong to another app
-            @keys = grep {
-                      $_
-                  and !exists $res{$_}
-                  and $class->isLlngKey( $args, $_ )
-            } @keys;
-            next unless (@keys);
-
-            # MGET returns undef for missing keys and keys that aren't strings
-            my @values = eval { $redisObj->mget(@keys) };
-            if ($@) {
-                print STDERR "Error when reading index $set: $@\n";
-                next;
-            }
-            foreach my $i ( 0 .. $#keys ) {
-                my ( $k, $tmp ) = ( $keys[$i], $values[$i] );
-                unless ($tmp) {
-
-                    # Lazy cleanup: remove orphan from index
-                    eval { $redisObj->eval( $SREM_ORPHAN, 2, $set, $k ) };
-                    next;
-                }
-                $tmp = eval { unserialize($tmp) };
-                if ( $@ or ref($tmp) ne 'HASH' ) {
-                    print STDERR "Error in session $k: "
-                      . ( $@ || "not a session\n" );
-                    next;
-                }
+            my $sessions = $class->_readIndex( $args, $redisObj, $set, \%res );
+            foreach my $k ( keys %$sessions ) {
 
                 # The index may be stale: check the session itself
-                next unless ( $test->( $tmp->{$selectField} ) );
-                $res{$k} = $class->extractFields( $tmp, @fields );
+                next unless ( $test->( $sessions->{$k}->{$selectField} ) );
+                $res{$k} = $class->extractFields( $sessions->{$k}, @fields );
             }
         }
         $cursor = $new_cursor;

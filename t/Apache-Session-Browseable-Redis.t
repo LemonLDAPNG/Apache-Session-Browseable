@@ -16,7 +16,7 @@ plan skip_all => "Redis error : $@"
     $r->flushdb();
   };
 
-plan tests => 57;
+plan tests => 67;
 
 $package = 'Apache::Session::Browseable::Redis';
 
@@ -313,5 +313,31 @@ $hash = $package->searchOnExpr( $args, 'uid', 'expr_*' );
 is( keys %$hash, 0, "searchOnExpr returns nothing for expired session" );
 ok( !$r->sismember( "uid_expr_test", $id_lz3 ),
     "searchOnExpr lazy cleanup removed orphan lz3 from index" );
+
+# Index members that may belong to another application are kept, real
+# orphans are removed
+my $orphan = 'f' x 64;
+foreach my $m (qw(searchOn searchOnExpr)) {
+    $r->sadd( 'uid_shared', 'otherapp:member', 'cart:42', $orphan );
+    $hash = $package->$m( $args, 'uid', $m eq 'searchOn' ? 'shared' : 'sha*' );
+    is( keys %$hash, 0, "$m returns nothing for foreign members" );
+    is_deeply(
+        [ sort $r->smembers('uid_shared') ],
+        [ 'cart:42', 'otherapp:member' ],
+        "$m kept foreign members and removed orphan"
+    );
+}
+
+# A member that isn't a string is skipped and kept
+my $hashKey = 'e' x 64;
+$r->hset( $hashKey, a => 'b' );
+$r->sadd( 'uid_alive', $hashKey );
+foreach my $m (qw(searchOn searchOnExpr)) {
+    $hash =
+      eval { $package->$m( $args, 'uid', $m eq 'searchOn' ? 'alive' : 'al*' ) };
+    is( $@, '', "$m doesn't die on a hash member" );
+    is_deeply( [ keys %$hash ], [$id_lz1], "$m skips the hash member" );
+    ok( $r->sismember( 'uid_alive', $hashKey ), "$m kept the hash member" );
+}
 
 $r->flushdb;
