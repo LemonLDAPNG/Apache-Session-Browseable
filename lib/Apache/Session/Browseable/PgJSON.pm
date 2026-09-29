@@ -7,6 +7,7 @@ use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::Postgres;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
+use JSON qw(to_json);
 
 our $VERSION = '1.3.9';
 our @ISA     = qw(Apache::Session);
@@ -27,10 +28,40 @@ sub populate {
 
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
-    $selectField =~ s/'/''/g;
-    my $query =
-      { query => "a_session ->> '$selectField' =?", values => [$value] };
-    return $class->_query( $args, $query, @fields );
+    return $class->_query( $args,
+        $class->_searchOnQuery( $args, $selectField, $value ), @fields );
+}
+
+# With GinIndex, add jsonb containment conditions that can use a GIN index
+# on a_session. "->>" also returns the text of numbers and booleans, so a
+# value that looks like one of them is searched in both forms. The "->>"
+# comparison is kept: results are exactly the same as without GinIndex.
+sub _searchOnQuery {
+    my ( $class, $args, $field, $value ) = @_;
+    ( my $q = $field ) =~ s/'/''/g;
+    my $f = "a_session ->> '$q'";
+
+    # "->>" returns arrays and objects as JSON text; jsonb rejects NUL
+    return { query => "$f =?", values => [$value] }
+      unless ( $args->{GinIndex}
+        and defined($value)
+        and $value !~ /^[\[{]/
+        and "$field$value" !~ /\0/ );
+
+    # Numbers beyond PostgreSQL numeric limits can't be stored in jsonb
+    my $literal = $value =~ /^(?:true|false)\z/
+      || (  $value =~ /^-?(0|[1-9][0-9]*)(?:\.([0-9]+))?\z/
+        and length($1) <= 131072
+        and length( $2 // '' ) <= 16383 );
+    my @docs = ( to_json( { $field => "$value" } ) );
+    push @docs, '{' . to_json( "$field", { allow_nonref => 1 } ) . ":$value}"
+      if ($literal);
+    return {
+        query => '('
+          . join( ' OR ', ('a_session @> ?::jsonb') x @docs )
+          . ") AND $f =?",
+        values => [ @docs, $value ],
+    };
 }
 
 sub searchOnExpr {

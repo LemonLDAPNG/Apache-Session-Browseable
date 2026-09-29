@@ -8,6 +8,7 @@ package SQLBackendTests;
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
 #  - index:   indexed fields (DBI based backends, one column per field)
+#  - gin:     1 to compare searchOn() results with and without GinIndex
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
@@ -16,6 +17,7 @@ use strict;
 use warnings;
 use Test::More;
 use Exporter 'import';
+use JSON;
 
 our @EXPORT = qw(run_tests);
 our $TODO;
@@ -354,6 +356,120 @@ sub run_tests {
             is( $rule->{not}->{uid}, "O'Brien", 'Rule is not modified' );
         }
     );
+
+    # GinIndex: searchOn() must return the same results with jsonb
+    # containment, whatever the JSON type of the searched field
+    if ( $o{gin} ) {
+        $dbh->do("DELETE FROM $table");
+
+        # Force the GIN index to be used, even on this small table
+        my $mdbh = $class->_classDbh($args);
+        $mdbh->do('SET enable_seqscan = off');
+        my $pi   = '3.14159265358979323846264338327950288419716939937510';
+        my $big  = '1' . ( '0' x 131071 );
+        my %rows = (
+            num      => '{"k":123}',
+            str      => '{"k":"123"}',
+            dec      => '{"k":1.50}',
+            dec2     => '{"k":1.5}',
+            negzero  => '{"k":-0}',
+            exp      => '{"k":1e2}',
+            exp2     => '{"k":1E+2}',
+            zero5    => '{"k":0e5}',
+            dec4     => '{"k":123.0000}',
+            pi       => qq({"k":$pi}),
+            big      => qq({"k":$big}),
+            true     => '{"k":true}',
+            strtrue  => '{"k":"true"}',
+            false    => '{"k":false}',
+            array    => '{"k":[1,2]}',
+            strarray => '{"k":"[1, 2]"}',
+            object   => '{"k":{"a":1}}',
+            null     => '{"k":null}',
+            strnull  => '{"k":"null"}',
+            empty    => '{"k":""}',
+            other    => '{"j":"123"}',
+            quotes   => JSON->new->encode( { k => qq{O'B"r\\n} } ),
+            newline  => JSON->new->encode( { k => "x\ny" } ),
+            unicode  => JSON->new->ascii->encode( { k => "\x{e9}t\x{e9}" } ),
+            smiley   => JSON->new->encode( { k => "\x{263a}" } ),
+        );
+        $dbh->do( "INSERT INTO $table (id,a_session) VALUES (?,?)",
+            undef, $_, $rows{$_} )
+          foreach ( keys %rows );
+        my $gargs = { %$args, GinIndex => 1 };
+
+        foreach my $v ( 'dwho', '1.5' ) {
+            my $q    = $class->_searchOnQuery( $gargs, 'k', $v );
+            my $plan = join "\n",
+              map { $_->[0] } @{
+                $mdbh->selectall_arrayref(
+                    "EXPLAIN SELECT id FROM $table WHERE $q->{query}",
+                    undef, @{ $q->{values} } )
+              };
+            like(
+                $plan,
+                qr/Bitmap Index Scan on \w+_gin/,
+                "GinIndex query for '$v' uses the GIN index"
+            );
+        }
+
+        foreach (
+            [ '123',                  'num,str' ],
+            [ 123,                    'num,str' ],
+            [ '1.5',                  'dec2' ],
+            [ '1.50',                 'dec' ],
+            [ '123.0000',             'dec4' ],
+            [ '123.0',                '' ],
+            [ '0',                    'negzero,zero5' ],
+            [ '-0',                   '' ],
+            [ '0e5',                  '' ],
+            [ '100',                  'exp,exp2' ],
+            [ '1e2',                  '' ],
+            [ '1E+2',                 '' ],
+            [ $pi,                    'pi' ],
+            [ substr( $pi, 0, 20 ),   '' ],
+            [ $big,                   'big' ],
+            [ $big . '0',             '' ],
+            [ '0.' . ( '1' x 16384 ), '' ],
+            [ 'true',                 'strtrue,true' ],
+            [ 'false',                'false' ],
+            [ '[1, 2]',               'array,strarray' ],
+            [ '{"a": 1}',             'object' ],
+            [ 'null',                 'strnull' ],
+            [ '',                     'empty' ],
+            [ qq{O'B"r\\n},           'quotes' ],
+            [ "x\ny",                 'newline' ],
+            [ "\x{e9}t\x{e9}",        'unicode' ],
+            [ "\x{263a}",             'smiley' ],
+            [ 'none',                 '' ],
+          )
+        {
+            my ( $v, $expected ) = @$_;
+            ( my $l = $v ) =~ s/[^ -~]/?/g;
+            $l = substr( $l, 0, 20 ) . '...(' . length($l) . ')'
+              if ( length($l) > 30 );
+            my $off = $class->searchOn( $args, 'k', $v, 'k' );
+            is( $name->($off), $expected, "searchOn [$l] on JSON types" );
+            my $on = eval { $class->searchOn( $gargs, 'k', $v, 'k' ) };
+            diag $@ if $@;
+            is_deeply( $on, $off, "searchOn [$l] with GinIndex: same result" );
+        }
+        is_deeply(
+            $class->searchOn( $gargs, 'k', '123' ),
+            $class->searchOn( $args,  'k', '123' ),
+            'searchOn with GinIndex without fields: same result'
+        );
+
+        $reset->();
+        foreach my $w ( "weird'field", 'uid', '_utime' ) {
+            my $v   = $w eq 'uid' ? "O'Brien" : $w eq '_utime' ? 100 : 'w1';
+            my $off = $class->searchOn( $args, $w, $v, 'uid' );
+            is_deeply( $class->searchOn( $gargs, $w, $v, 'uid' ),
+                $off, "searchOn on field [$w] with GinIndex: same result" );
+        }
+        $mdbh->do('RESET enable_seqscan');
+    }
 
     $dbh->do("DROP TABLE IF EXISTS $table");
     $dbh->disconnect;
