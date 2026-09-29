@@ -59,20 +59,29 @@ sub _query {
       || $Apache::Session::Store::DBI::TableName;
 
     my $sth;
-    my $fields = join( ',',
+    my $fields =
+      @fields
+      ? join( ',',
         'id',
         map { $class->_sqlField( $dbh, $_ ) . ' AS ' . $class->_sqlAlias($_) }
-          @fields );
+          @fields )
+      : 'id,a_session';
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
     $sth->execute( @{ $query->{values} } );
 
-    # In this case, PostgreSQL change field name in lowercase
     my $res = $sth->fetchall_hashref('id') or return {};
-    foreach (@fields) {
-        if ( $_ ne lc($_) ) {
-            foreach my $s ( keys %$res ) {
-                $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ };
+    unless (@fields) {
+        my $self = eval "&${class}::populate();";
+        my $sub  = $self->{unserialize};
+        foreach my $s ( keys %$res ) {
+            eval {
+                my $tmp = &$sub( { serialized => $res->{$s}->{a_session} } );
+                $res->{$s} = $tmp;
+            };
+            if ($@) {
+                print STDERR "Error in session $s: $@\n";
+                delete $res->{$s};
             }
         }
     }
@@ -135,7 +144,7 @@ sub get_key_from_all_sessions {
     # Special case if all wanted fields are indexed
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
-        my $fields = join ',',
+        my $fields = join ',', 'id',
           map { $class->_sqlField( $dbh, $_ ) . ' AS ' . $class->_sqlAlias($_) }
           @$data;
         $sth = $dbh->prepare("SELECT $fields from $table_name");
