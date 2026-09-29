@@ -50,6 +50,7 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
       _whatToTrace varchar(255),
       _session_kind varchar(32),
       _utime bigint,
+      _lastSeen bigint,
       ipAddr varchar(64)
   );
 
@@ -58,11 +59,21 @@ Add indexes:
   CREATE INDEX uid1 ON sessions (_whatToTrace) USING BTREE;
   CREATE INDEX s1   ON sessions (_session_kind);
   CREATE INDEX u1   ON sessions (_utime);
+  CREATE INDEX ls1  ON sessions (_lastSeen);
   CREATE INDEX ip1  ON sessions (ipAddr) USING BTREE;
 
 Indexed columns can't be C<text>: MySQL can't index them without a prefix
 length. C<_utime> must be numeric (C<bigint>) so that deleteIfLowerThan() can
 use its index.
+
+C<_lastSeen> column and index are needed when Lemonldap::NG "timeoutActivity"
+is used: sessions purge then calls deleteIfLowerThan() on C<_utime> and
+C<_lastSeen>, which does nothing unless both fields are in C<Index> (purge
+then falls back to reading all sessions).
+
+With strict SQL mode (default since MySQL 5.7), storing a value longer than
+its column fails, so the whole session can't be saved: size C<varchar>
+columns generously.
 
 Use it with Perl:
 
@@ -77,7 +88,7 @@ Use it with Perl:
        LockPassword   => $db_pass,
 
        # Choose your browseable fileds
-       Index          => 'uid mail',
+       Index          => '_whatToTrace _session_kind _utime _lastSeen ipAddr',
   };
   
   # Use it like Apache::Session

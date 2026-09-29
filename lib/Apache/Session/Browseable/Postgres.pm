@@ -85,6 +85,7 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
       _whatToTrace text,
       _session_kind text,
       _utime bigint,
+      _lastSeen bigint,
       ipAddr varchar(64)
   );
 
@@ -93,6 +94,7 @@ Add indexes:
   CREATE INDEX uid1 ON sessions USING BTREE (_whatToTrace text_pattern_ops);
   CREATE INDEX s1   ON sessions (_session_kind);
   CREATE INDEX u1   ON sessions (_utime);
+  CREATE INDEX ls1  ON sessions (_lastSeen);
   CREATE INDEX ip1  ON sessions USING BTREE (ipAddr varchar_pattern_ops);
 
 searchOnExpr() uses C<LIKE 'prefix%'> queries: unless the database uses the
@@ -103,6 +105,11 @@ with a C<*> wildcard can never use a btree index.
 
 C<_utime> must be a C<bigint> column, else deleteIfLowerThan() can't use its
 index.
+
+C<_lastSeen> column and index are needed when Lemonldap::NG "timeoutActivity"
+is used: sessions purge then calls deleteIfLowerThan() on C<_utime> and
+C<_lastSeen>, which does nothing unless both fields are in C<Index> (purge
+then falls back to reading all sessions).
 
 Use it with Perl:
 
@@ -115,7 +122,7 @@ Use it with Perl:
        Commit     => 1,
 
        # Choose your browseable fileds
-       Index      => '_whatToTrace _session_kind _utime ipAddr',
+       Index      => '_whatToTrace _session_kind _utime _lastSeen ipAddr',
   };
   
   # Use it like Apache::Session

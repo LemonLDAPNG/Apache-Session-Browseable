@@ -12,8 +12,8 @@ package SQLBackendTests;
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
 #  - explain: sub( $class, $dbh ) returning a list of
-#             [ description, WHERE clause, index ]:
-#             the plan of each WHERE clause must use the index
+#             [ description, WHERE clause, index or array ref of indexes ]:
+#             the plan of each WHERE clause must use all these indexes
 #
 # ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
 # of table names.
@@ -396,23 +396,28 @@ sub run_tests {
         eval { $dbh->do('SET SESSION explain_format=TRADITIONAL') }
           if ( $o{driver} eq 'mysql' );
         foreach ( $o{explain}->( $class, $dbh ) ) {
-            my ( $desc, $where, $index ) = @$_;
-            $index =~ s/__TABLE__/$table/g;
+            my ( $desc, $where, $indexes ) = @$_;
+            my @indexes =
+              map { ( my $i = $_ ) =~ s/__TABLE__/$table/g; $i }
+              ref($indexes) ? @$indexes : ($indexes);
+            my $index = join ',', @indexes;
             my $sth =
               $dbh->prepare("EXPLAIN SELECT id FROM $table WHERE $where");
             $sth->execute;
             if ( $o{driver} eq 'Pg' ) {
                 my $plan = join "\n",
                   map { $_->[0] } @{ $sth->fetchall_arrayref };
-                ok( $plan =~ /\b\Q$index\E\b/ && $plan =~ /Index Cond/,
+                my @missing = grep { $plan !~ /\b\Q$_\E\b/ } @indexes;
+                ok( !@missing && $plan =~ /Index Cond/,
                     "$desc uses index $index" )
                   or diag "$where:\n$plan";
             }
             else {
-                my $row  = $sth->fetchrow_hashref('NAME_lc');
-                my $keys = $row->{possible_keys} // '';
-                ok( ( grep { $_ eq $index } split /,/, $keys ),
-                    "$desc can use index $index" )
+                my $row     = $sth->fetchrow_hashref('NAME_lc');
+                my $keys    = $row->{possible_keys} // '';
+                my %keys    = map  { $_ => 1 } split /,/, $keys;
+                my @missing = grep { !$keys{$_} } @indexes;
+                ok( !@missing, "$desc can use index $index" )
                   or diag "$where: possible_keys=$keys";
                 $sth->finish;
             }
