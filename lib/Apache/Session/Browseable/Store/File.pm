@@ -1,7 +1,8 @@
 package Apache::Session::Browseable::Store::File;
 
 use strict;
-use Fcntl qw(O_RDWR O_CREAT);
+use Fcntl qw(O_RDWR O_CREAT O_EXCL);
+use Errno qw(EEXIST);
 use Apache::Session::Store::File;
 our @ISA     = qw(Apache::Session::Store::File);
 our $VERSION = 1.2.2;
@@ -18,7 +19,9 @@ sub insert {
     my $self    = shift;
     my $session = shift;
 
-    $self->_open($session);
+    # Like the parent store, never overwrite an existing session (O_EXCL
+    # also closes the race between the existence check and the open)
+    $self->_open( $session, 1 );
     $self->_write($session);
 }
 
@@ -33,13 +36,19 @@ sub update {
 }
 
 sub _open {
-    my ( $self, $session ) = @_;
+    my ( $self, $session, $exclusive ) = @_;
 
     my $directory = $session->{args}->{Directory}
       || $Apache::Session::Store::File::Directory;
     my $file = $directory . '/' . $session->{data}->{_session_id};
-    sysopen( $self->{fh}, $file, O_RDWR | O_CREAT )
-      || die "Could not open file $file: $!";
+    unless (
+        sysopen( $self->{fh}, $file,
+            O_RDWR | O_CREAT | ( $exclusive ? O_EXCL : 0 ) )
+      )
+    {
+        die "Object already exists in the data store" if ( $! == EEXIST );
+        die "Could not open file $file: $!";
+    }
     $self->{opened} = 1;
 }
 
@@ -57,9 +66,9 @@ sub _write {
 
 __END__
 
-=head1 NAME
-
 =encoding utf8
+
+=head1 NAME
 
 Apache::Session::Browseable::Store::File - Store sessions in files, as UTF-8
 
