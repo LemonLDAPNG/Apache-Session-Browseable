@@ -20,11 +20,11 @@ run_tests(
     scs     => 1,
     explain => sub {
         my ($class) = @_;
-        my $wt      = $class->_sqlField('_whatToTrace');
-        my $ut      = $class->_sqlField('_utime');
+        my $wt = $class->_sqlField('_whatToTrace');
         return (
             [
-                'deleteIfLowerThan', "cast($ut as bigint) < 200",
+                'deleteIfLowerThan',
+                $class->_buildLowerThanExpression( '_utime', 200 ),
                 '__TABLE___u1'
             ],
             [ 'searchOnExpr', "$wt like 'dw%'", '__TABLE___uid1' ],

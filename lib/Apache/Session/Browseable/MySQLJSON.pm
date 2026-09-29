@@ -90,15 +90,13 @@ sub deleteIfLowerThan {
     my $dbh = $class->_classDbh($args);
     if ( $rule->{or} ) {
         $query = join ' OR ', map {
-            my $f = $class->_sqlField( $dbh, $_ );
-            "cast($f as UNSIGNED) < $rule->{or}->{$_}"
+            $class->_buildLowerThanExpression( $_, $rule->{or}->{$_}, $dbh )
           }
           keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ', map {
-            my $f = $class->_sqlField( $dbh, $_ );
-            "cast($f as UNSIGNED) < $rule->{and}->{$_}"
+            $class->_buildLowerThanExpression( $_, $rule->{and}->{$_}, $dbh )
           }
           keys %{ $rule->{and} };
     }
@@ -174,6 +172,14 @@ sub get_key_from_all_sessions {
         }
     );
     return \%res;
+}
+
+# Same arguments as in DBI.pm plus the database handle (needed to quote the
+# JSON path). Must match the documented generated columns
+sub _buildLowerThanExpression {
+    my ( $class, $field, $value, $dbh ) = @_;
+    my $f = $class->_sqlField( $dbh, $field );
+    return "cast($f as UNSIGNED) < $value";
 }
 
 # Build SQL expression to get a field from a_session. Field name is used as

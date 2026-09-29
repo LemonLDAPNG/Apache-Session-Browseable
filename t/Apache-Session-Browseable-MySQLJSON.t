@@ -24,15 +24,14 @@ run_tests(
     weird   => [ "weird'field", 'a"b\\c', 'a?b', 'x\\' ],
     explain => sub {
         my ( $class, $dbh ) = @_;
-        my ( $wt, $sk, $ut ) =
-          map { $class->_sqlField( $dbh, $_ ) }
-          qw(_whatToTrace _session_kind _utime);
+        my ( $wt, $sk ) =
+          map { $class->_sqlField( $dbh, $_ ) } qw(_whatToTrace _session_kind);
+        my $ut = $class->_buildLowerThanExpression( '_utime', 200, $dbh );
         return (
-            [ 'deleteIfLowerThan', "cast($ut as UNSIGNED) < 200", 'as_ut' ],
+            [ 'deleteIfLowerThan', $ut, 'as_ut' ],
             [
                 'deleteIfLowerThan with "not"',
-                "(cast($ut as UNSIGNED) < 200)"
-                  . " AND ($sk IS NULL OR $sk <> 'Persistent')",
+                "($ut) AND ($sk IS NULL OR $sk <> 'Persistent')",
                 'as_ut'
             ],
             [ 'searchOn', "$wt = 'dwho'", 'as_wt' ],

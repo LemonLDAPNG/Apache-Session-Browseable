@@ -85,17 +85,13 @@ sub deleteIfLowerThan {
     return 0
       unless ( Apache::Session::Browseable::_common->_checkThresholds($rule) );
     if ( $rule->{or} ) {
-        $query = join ' OR ', map {
-            my $f = $class->_sqlField($_);
-            "cast($f as bigint) < $rule->{or}->{$_}"
-          }
+        $query = join ' OR ',
+          map { $class->_buildLowerThanExpression( $_, $rule->{or}->{$_} ) }
           keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
-        $query = join ' AND ', map {
-            my $f = $class->_sqlField($_);
-            "cast($f as bigint) < $rule->{and}->{$_}"
-          }
+        $query = join ' AND ',
+          map { $class->_buildLowerThanExpression( $_, $rule->{and}->{$_} ) }
           keys %{ $rule->{and} };
     }
     return 0 unless ($query);
@@ -170,6 +166,13 @@ sub get_key_from_all_sessions {
         }
     );
     return \%res;
+}
+
+# Must match the documented expression indexes (_utime, _lastSeen)
+sub _buildLowerThanExpression {
+    my ( $class, $field, $value ) = @_;
+    my $f = $class->_sqlField($field);
+    return "cast($f as bigint) < $value";
 }
 
 # Build SQL expression to get a field from a_session
