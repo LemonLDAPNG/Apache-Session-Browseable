@@ -83,6 +83,25 @@ sub _readIndex {
     return \%res;
 }
 
+# searchOnExpr() patterns: '*' is a wildcard
+sub _exprRe {
+    my ($value) = @_;
+    $value = quotemeta($value);
+    $value =~ s/\\\*/\.\*/g;
+    return qr/^$value$/;
+}
+
+# Add decoded sessions whose $selectField matches $test to $res: the index
+# may be stale (concurrent rewrite, missed SREM)
+sub _keepMatching {
+    my ( $class, $res, $sessions, $selectField, $test, @fields ) = @_;
+    foreach my $id ( keys %$sessions ) {
+        my $v = $sessions->{$id}->{$selectField};
+        next unless ( defined $v and $test->($v) );
+        $res->{$id} = $class->extractFields( $sessions->{$id}, @fields );
+    }
+}
+
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
 
@@ -92,8 +111,8 @@ sub searchOn {
         my $redisObj = $class->_getRedis($args);
         my $sessions =
           $class->_readIndex( $args, $redisObj, "${selectField}_$value" );
-        $res{$_} = $class->extractFields( $sessions->{$_}, @fields )
-          foreach ( keys %$sessions );
+        $class->_keepMatching( \%res, $sessions, $selectField,
+            sub { $_[0] eq $value }, @fields );
     }
     else {
         $class->get_key_from_all_sessions(
@@ -120,6 +139,7 @@ sub searchOn {
 sub searchOnExpr {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
     my %res;
+    my $re = _exprRe($value);
     if ( $class->isIndexed( $args, $selectField ) ) {
         my $redisObj = $class->_getRedis($args);
         my $cursor   = 0;
@@ -129,21 +149,18 @@ sub searchOnExpr {
             foreach my $set (@$sets) {
                 my $sessions =
                   $class->_readIndex( $args, $redisObj, $set, \%res );
-                $res{$_} = $class->extractFields( $sessions->{$_}, @fields )
-                  foreach ( keys %$sessions );
+                $class->_keepMatching( \%res, $sessions, $selectField,
+                    sub { $_[0] =~ $re }, @fields );
             }
             $cursor = $new_cursor;
         } while ( $cursor != 0 );
     }
     else {
-        $value = quotemeta($value);
-        $value =~ s/\\\*/\.\*/g;
-        $value = qr/^$value$/;
         $class->get_key_from_all_sessions(
             $args,
             sub {
                 my ( $entry, $id ) = @_;
-                return undef unless ( $entry->{$selectField} =~ $value );
+                return undef unless ( $entry->{$selectField} =~ $re );
                 $res{$id} = $class->extractFields( $entry, @fields );
                 undef;
             }
@@ -215,12 +232,10 @@ sub _searchCompare {
             # Sets of other fields ("${selectField}_x_1") aren't numbers
             next unless ( $test->( substr( $set, length($prefix) ) ) );
             my $sessions = $class->_readIndex( $args, $redisObj, $set, \%res );
-            foreach my $k ( keys %$sessions ) {
 
-                # The index may be stale: check the session itself
-                next unless ( $test->( $sessions->{$k}->{$selectField} ) );
-                $res{$k} = $class->extractFields( $sessions->{$k}, @fields );
-            }
+            # The index may be stale: check the session itself
+            $class->_keepMatching( \%res, $sessions, $selectField, $test,
+                @fields );
         }
         $cursor = $new_cursor;
     } while ( $cursor != 0 );
