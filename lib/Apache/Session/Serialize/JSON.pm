@@ -12,6 +12,11 @@ sub serialize {
     my $session = shift;
 
     $session->{serialized} = to_json( $session->{data}, { allow_nonref => 1 } );
+
+    # JSON::PP doesn't flag its result as UTF-8 when data holds only Latin-1
+    # characters: some DBD drivers would then store Latin-1 bytes
+    utf8::upgrade( $session->{serialized} );
+    return $session->{serialized};
 }
 
 sub unserialize {

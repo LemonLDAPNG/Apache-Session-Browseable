@@ -18,6 +18,16 @@ my $session = { data => { cn => $wide, sn => $latin } };
 Apache::Session::Serialize::JSON::serialize($session);
 my $chars = $session->{serialized};
 ok( utf8::is_utf8($chars), 'serialize produces characters' );
+$session = { data => { sn => $latin } };
+is(
+    Apache::Session::Serialize::JSON::serialize($session),
+    $session->{serialized},
+    'serialize returns serialized data'
+);
+ok(
+    utf8::is_utf8( $session->{serialized} ),
+    'serialize produces characters with Latin-1 data'
+);
 
 # Characters
 is_deeply( unser($chars), { cn => $wide, sn => $latin }, 'Characters' );
