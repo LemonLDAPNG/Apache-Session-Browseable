@@ -11,6 +11,9 @@ package SQLBackendTests;
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
+#
+# ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
+# of table names.
 
 use strict;
 use warnings;
@@ -24,6 +27,8 @@ sub run_tests {
     my %o = @_;
     my ( $class, $table ) = @o{qw(class table)};
     my $dsn = $ENV{"$o{env}_DSN"};
+    $table =~ s/^asb_test_/$ENV{ASB_TEST_TABLE_PREFIX}/
+      if $ENV{ASB_TEST_TABLE_PREFIX};
 
     plan skip_all => "DBD::$o{driver} is needed for this test"
       unless eval "require DBI; require DBD::$o{driver}; 1";
