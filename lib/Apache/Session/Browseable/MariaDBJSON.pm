@@ -205,8 +205,9 @@ names.
 
 Searches are exact (case- and accent-sensitive) for all fields, as long as
 generated text columns use the C<utf8mb4_bin> collation (see above). Field
-names and searched values are character strings: a UTF-8 encoded byte string
-doesn't match non-ASCII values.
+names and searched values are strings: a non flagged string containing bytes
+C<0x80> or more is first tried as UTF-8 and read as Latin-1 if it is not
+valid UTF-8, so both encodings find non-ASCII values.
 
 To add a generated column to an existing table:
 

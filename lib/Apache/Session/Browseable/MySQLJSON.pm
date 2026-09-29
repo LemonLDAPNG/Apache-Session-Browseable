@@ -382,8 +382,9 @@ Don't set C<Index>: any field can be searched from C<a_session> and the store
 would try to write indexed fields into columns of the same name, which don't
 exist in a JSON table. C<populate()> warns when C<Index> is set.
 
-Field names and searched values are character strings: a UTF-8 encoded byte
-string doesn't match non-ASCII values.
+Field names and searched values are strings: a non flagged string containing
+bytes C<0x80> or more is first tried as UTF-8 and read as Latin-1 if it is
+not valid UTF-8, so both encodings find non-ASCII values.
 
 Use it like L<Apache::Session::Browseable::MySQL>
 
