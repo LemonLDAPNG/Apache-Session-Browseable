@@ -90,7 +90,9 @@ Latin-1 session that is also valid UTF-8 is then read as UTF-8: for example
 part of such a sequence, that is bytes C2-DF followed by 80-BF, or a valid
 UTF-8 sequence formed over the whole session (mostly values that are already
 mojibake). Redis is not affected: it stores Latin-1 but reads it with
-C<unserializeLatin1()>, which skips the UTF-8 decode.
+C<unserializeLatin1()>, which skips the UTF-8 decode. The File backend has
+no such variant, so the ambiguity remains on files; fixing it cleanly would
+need an encoding marker stored with the session.
 
 =head1 UPGRADE
 
