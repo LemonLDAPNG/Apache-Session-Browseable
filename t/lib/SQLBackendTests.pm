@@ -667,11 +667,17 @@ sub run_tests {
                 ok( !@missing, "$desc can use index $index" )
                   or diag "$where: possible_keys=$keys";
                 if ( $o{explain_key} ) {
-                    is_deeply(
-                        [ sort split /,/, $row->{key} // '' ],
-                        [ sort @indexes ],
-                        "$desc uses index $index"
-                    ) or diag "$where: type=" . ( $row->{type} // '' );
+
+                    # The optimizer may combine indexes (index_merge), so the
+                    # expected ones must be included in key, not equal it
+                    my %used = map { $_ => 1 } split /,/, $row->{key} // '';
+                    my @missing = grep { !$used{$_} } @indexes;
+                    ok( !@missing && ( $row->{type} // '' ) ne 'ALL',
+                        "$desc uses index $index" )
+                      or diag "$where: key="
+                      . ( $row->{key} // '' )
+                      . " type="
+                      . ( $row->{type} // '' );
                 }
                 $sth->finish;
             }
