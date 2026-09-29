@@ -29,7 +29,6 @@ sub searchOnExpr {
     my ( $args, $selectField, $value, @fields ) = @_;
 
     # Escape quotes
-    $value       =~ s/'/''/g;
     $selectField =~ s/'/''/g;
     if ( $class->_fieldIsIndexed( $args, $selectField ) ) {
         $value =~ s/\*/%/g;
@@ -57,7 +56,8 @@ sub _query {
     my $indexed = $class->_tabInTab( \@fields, $index );
     my $sth;
     if ($indexed) {
-        my $fields = join( ',', 'id', map { s/'//g; $_ } @fields );
+        my $fields =
+          join( ',', 'id', map { ( my $f = $_ ) =~ s/'//g; $f } @fields );
         $sth = $dbh->prepare(
             "SELECT $fields from $table_name where $query->{query}");
         $sth->execute( @{ $query->{values} } );
@@ -172,7 +172,7 @@ sub get_key_from_all_sessions {
         if ($indexed) {
             my $sth =
               $dbh->prepare_cached( 'SELECT id,'
-                  . join( ',', map { s/'/''/g; $_ } @$data )
+                  . join( ',', map { ( my $f = $_ ) =~ s/'/''/g; $f } @$data )
                   . " from $table_name" );
             $sth->execute;
             return $sth->fetchall_hashref('id');
