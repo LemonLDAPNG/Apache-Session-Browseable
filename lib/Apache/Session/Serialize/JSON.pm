@@ -2,10 +2,11 @@
 package Apache::Session::Serialize::JSON;
 
 use strict;
-use JSON qw(to_json from_json);
+use JSON qw(to_json);
 
 our $VERSION = '1.2.6';
 
+my $json     = JSON->new->allow_nonref;
 my $utf8Json = JSON->new->utf8->allow_nonref;
 
 sub serialize {
@@ -32,14 +33,11 @@ sub _unserialize {
     my $tmp;
 
     # Some stores (MySQL json columns, files,...) return UTF-8 bytes
-    if (    defined $serialized
-        and !utf8::is_utf8($serialized)
-        and $serialized =~ /[\x80-\xff]/ )
-    {
+    if ( defined $serialized and !utf8::is_utf8($serialized) ) {
         $tmp = eval { $utf8Json->decode($serialized) };
         return $tmp unless ($@);
     }
-    eval { $tmp = from_json( $serialized, { allow_nonref => 1 } ) };
+    eval { $tmp = $json->decode($serialized) };
     if ($@) {
         require Storable;
         $next ||= \&Storable::thaw;
