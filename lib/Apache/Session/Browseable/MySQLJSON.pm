@@ -42,7 +42,7 @@ sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
     my $dbh   = $class->_classDbh($args);
     my $query = {
-        query  => $class->_sqlField( $dbh, $selectField ) . ' =?',
+        query  => $class->_sqlField( $dbh, $selectField, $args ) . ' =?',
         values => [$value]
     };
     return $class->_query( $args, $query, @fields );
@@ -53,7 +53,7 @@ sub searchOnExpr {
     my $dbh = $class->_classDbh($args);
     $value =~ s/\*/%/g;
     my $query = {
-        query  => $class->_sqlField( $dbh, $selectField ) . ' like ?',
+        query  => $class->_sqlField( $dbh, $selectField, $args ) . ' like ?',
         values => [$value]
     };
     return $class->_query( $args, $query, @fields );
@@ -72,7 +72,7 @@ sub _query {
       || $Apache::Session::Store::DBI::TableName;
 
     my $sth;
-    my ( $select, $aliases ) = $class->_sqlSelect( $dbh, @fields );
+    my ( $select, $aliases ) = $class->_sqlSelect( $dbh, \@fields, $args );
     my $fields = join( ',', 'id', @$select );
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
@@ -90,13 +90,15 @@ sub deleteIfLowerThan {
     my $dbh = $class->_classDbh($args);
     if ( $rule->{or} ) {
         $query = join ' OR ', map {
-            $class->_buildLowerThanExpression( $_, $rule->{or}->{$_}, $dbh )
+            $class->_buildLowerThanExpression( $_, $rule->{or}->{$_},
+                $dbh, $args )
           }
           keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ', map {
-            $class->_buildLowerThanExpression( $_, $rule->{or}->{$_}, $dbh )
+            $class->_buildLowerThanExpression( $_, $rule->{or}->{$_},
+                $dbh, $args )
           }
           keys %{ $rule->{or} };
     }
@@ -105,7 +107,7 @@ sub deleteIfLowerThan {
             ' AND ',
             map {
                 push @bind, $rule->{not}->{$_};
-                $class->_sqlField( $dbh, $_ ) . ' <> ?'
+                $class->_sqlField( $dbh, $_, $args ) . ' <> ?'
               }
               keys %{ $rule->{not} }
         );
@@ -136,7 +138,7 @@ sub get_key_from_all_sessions {
     # Special case if all wanted fields are indexed
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
-        my ( $select, $aliases ) = $class->_sqlSelect( $dbh, @$data );
+        my ( $select, $aliases ) = $class->_sqlSelect( $dbh, $data, $args );
         my $fields = join ',', @$select;
         $sth = $dbh->prepare("SELECT $fields from $table_name");
         $sth->execute;
@@ -175,18 +177,26 @@ sub get_key_from_all_sessions {
 }
 
 # Same arguments as in DBI.pm plus the database handle (needed to quote the
-# JSON path). The handle is optional: without one, _sqlField() quotes the path.
-# The expression must match the documented generated columns
+# JSON path) and connection arguments. The handle is optional: without one,
+# _sqlPath() quotes the path. The expression must match the documented
+# generated columns
 sub _buildLowerThanExpression {
-    my ( $class, $field, $value, $dbh ) = @_;
-    my $f = $class->_sqlField( $dbh, $field );
+    my ( $class, $field, $value, $dbh, $args ) = @_;
+    my $f = $class->_sqlField( $dbh, $field, $args );
     return "cast($f as UNSIGNED) < $value";
 }
 
-# Build SQL expression to get a field from a_session. Field name is used as
+# Build SQL expression to get a field from a_session ($args: connection
+# arguments, for subclasses)
+sub _sqlField {
+    my ( $class, $dbh, $field, $args ) = @_;
+    return 'a_session->>' . $class->_sqlPath( $dbh, $field );
+}
+
+# Build the SQL literal of the JSON path of a field. Field name is used as
 # JSON path member, quoted if needed. The database handle is only used to
 # quote the path: it may be missing on the DBI deleteIfLowerThan() path
-sub _sqlField {
+sub _sqlPath {
     my ( $class, $dbh, $field ) = @_;
     my $path;
     if ( $field =~ /^[A-Za-z_][A-Za-z0-9_]*\z/ ) {
@@ -196,24 +206,24 @@ sub _sqlField {
         ( my $f = $field ) =~ s/(["\\])/\\$1/g;
         $path = qq{\$."$f"};
     }
-    return 'a_session->>' . $dbh->quote($path) if ( defined $dbh );
+    return $dbh->quote($path) if ( defined $dbh );
 
     # No database handle: quote the path here (MySQL escapes backslashes)
     $path =~ s/\\/\\\\/g;
     $path =~ s/'/''/g;
-    return "a_session->>'$path'";
+    return "'$path'";
 }
 
 # Build the SELECT list for the given fields. Column aliases are generated
 # (a field name may contain "?", which DBD::mysql takes for a placeholder even
 # inside backquotes): returns the list and an alias => field name hash
 sub _sqlSelect {
-    my ( $class, $dbh, @fields ) = @_;
+    my ( $class, $dbh, $fields, $args ) = @_;
     my ( @select, %aliases );
-    foreach my $field (@fields) {
+    foreach my $field (@$fields) {
         my $alias = 'f' . scalar(@select);
         $aliases{$alias} = $field;
-        push @select, $class->_sqlField( $dbh, $field ) . " AS `$alias`";
+        push @select, $class->_sqlField( $dbh, $field, $args ) . " AS `$alias`";
     }
     return ( \@select, \%aliases );
 }
@@ -240,7 +250,9 @@ sub _classDbh {
       DBI->connect_cached( $datasource, $username, $password,
         { RaiseError => 1, AutoCommit => 1 } )
       || die $DBI::errstr;
-    $dbh->{mysql_enable_utf8} = 1;
+
+    # DBD::MariaDB always uses UTF-8
+    $dbh->{mysql_enable_utf8} = 1 if ( $dbh->{Driver}->{Name} eq 'mysql' );
     return $dbh;
 }
 
