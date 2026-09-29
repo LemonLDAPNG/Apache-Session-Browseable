@@ -24,10 +24,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Perl dependencies
-        run: sudo apt install libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl liblwp-protocol-psgi-perl
+        run: sudo apt-get update && sudo apt-get install -y libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl liblwp-protocol-psgi-perl
+      - name: Install OpenLDAP
+        run: |
+          sudo debconf-set-selections <<'EOF'
+          slapd slapd/no_configuration boolean false
+          slapd slapd/domain string example.com
+          slapd shared/organization string Example
+          slapd slapd/password1 password secret
+          slapd slapd/password2 password secret
+          EOF
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y slapd ldap-utils
+          sudo service slapd start
+          ldapwhoami -x -H ldap://localhost -D cn=admin,dc=example,dc=com -w secret
       - name: Build and run tests
         env:
           REDIS_URL: localhost:6379
+          LDAP_URL: ldap://localhost
+          LDAP_BINDDN: cn=admin,dc=example,dc=com
+          LDAP_BINDPW: secret
+          LDAP_BASE: dc=example,dc=com
         run: |
           perl Build.PL
           ./Build
