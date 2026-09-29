@@ -12,6 +12,5 @@ run_tests(
           . ' a_session text, uid text, _whatToTrace text, _session_kind text,'
           . ' _utime bigint, _lastSeen bigint)'
     ],
-    index   => 'uid _whatToTrace _session_kind _utime _lastSeen',
-    lcGkfas => 1,
+    index  => 'uid _whatToTrace _session_kind _utime _lastSeen',
 );

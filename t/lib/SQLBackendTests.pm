@@ -11,8 +11,6 @@ package SQLBackendTests;
 #  - json:    1 if any field can be queried (JSON/Hstore backends)
 #  - weird:   field names that need quoting (JSON/Hstore backends)
 #  - corrupt: a_session value that can't be unserialized
-#  - lcGkfas: 1 if get_key_from_all_sessions() with indexed field names
-#             returns lower-cased names (DBI backend with PostgreSQL)
 
 use strict;
 use warnings;
@@ -181,13 +179,25 @@ sub run_tests {
         'rtyler@badwolf.org',
         'get_key_from_all_sessions returns session data' );
 
-    my $f = $o{lcGkfas} ? '_whattotrace' : '_whatToTrace';
     $res = $class->get_key_from_all_sessions( $args, '_whatToTrace' );
     is_deeply(
         $res->{ $ids->{rtyler} },
-        { id => $ids->{rtyler}, $f => 'rtyler' },
+        { id => $ids->{rtyler}, _whatToTrace => 'rtyler' },
         'get_key_from_all_sessions with a field name'
     );
+
+    # Mixed-case field with a false value
+    my $zero = $newSession->( %{ $data{dwho} }, _whatToTrace => '0' );
+    $res = $class->searchOn( $args, 'uid', 'dwho', '_whatToTrace' );
+    is( $res->{$zero}->{_whatToTrace},
+        '0', 'searchOn with fields keeps false value under original case' );
+    $res = $class->get_key_from_all_sessions( $args, ['_whatToTrace'] );
+    is( $res->{$zero}->{_whatToTrace},
+        '0', 'get_key_from_all_sessions with array ref and false value' );
+    $res = $class->get_key_from_all_sessions( $args, '_whatToTrace' );
+    is( $res->{$zero}->{_whatToTrace},
+        '0', 'get_key_from_all_sessions with a field name and false value' );
+    $dbh->do( "DELETE FROM $table WHERE id=?", undef, $zero );
 
     my $fields = [ 'uid', '_utime' ];
     $res = $class->get_key_from_all_sessions( $args, $fields );

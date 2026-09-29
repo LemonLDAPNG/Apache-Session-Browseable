@@ -26,36 +26,42 @@ sub populate {
     return $self;
 }
 
+# PostgreSQL folds unquoted column names to lower case: restore the case of
+# requested fields in the result set
+sub _restoreCase {
+    my ( $res, @fields ) = @_;
+    foreach my $f (@fields) {
+        next if ref($f) or $f eq lc($f);
+        my $lc = lc $f;
+        foreach my $s ( keys %$res ) {
+            my $h = $res->{$s};
+            next unless ref($h) eq 'HASH';
+            $h->{$f} = delete $h->{$lc}
+              if exists $h->{$lc} and not exists $h->{$f};
+        }
+    }
+    return $res;
+}
+
 sub searchOn {
     my $class = shift;
     my ( $args, $selectField, $value, @fields ) = @_;
     my $res = $class->SUPER::searchOn(@_);
-
-    # Ensure fields case is preserved
-    foreach (@fields) {
-        if ( $_ ne lc($_) ) {
-            foreach my $s ( keys %$res ) {
-                $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ }
-                  if $res->{$s}->{ lc $_ };
-            }
-        }
-    }
-    return $res;
+    return _restoreCase( $res, @fields );
 }
 
 sub searchOnExpr {
     my $class = shift;
     my ( $args, $selectField, $value, @fields ) = @_;
     my $res = $class->SUPER::searchOnExpr(@_);
+    return _restoreCase( $res, @fields );
+}
 
-    # Ensure fields case is preserved
-    foreach (@fields) {
-        if ( $_ ne lc($_) ) {
-            foreach my $s ( keys %$res ) {
-                $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ }
-                  if $res->{$s}->{ lc $_ };
-            }
-        }
+sub get_key_from_all_sessions {
+    my ( $class, $args, $data ) = @_;
+    my $res = $class->SUPER::get_key_from_all_sessions( @_[ 1 .. $#_ ] );
+    if ( defined $data and ref($data) ne 'CODE' ) {
+        _restoreCase( $res, ref($data) eq 'ARRAY' ? @$data : $data );
     }
     return $res;
 }
