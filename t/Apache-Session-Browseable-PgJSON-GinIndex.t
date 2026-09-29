@@ -1,6 +1,7 @@
 use strict;
 use Test::More;
 use JSON qw(from_json);
+use Encode qw(encode);
 
 # searchOn() queries built with GinIndex (tested against PostgreSQL in
 # Apache-Session-Browseable-PgJSON.t when PG_DSN is set)
@@ -146,6 +147,22 @@ foreach (@tests) {
     is_deeply( [ keys %{ $decoded[1] } ],
         [$field], "$desc: second JSON document" )
       if ( @docs > 1 );
+}
+
+# is_deeply() unifies UTF-8 flagged and unflagged scalars, so a double
+# encoded document passes unnoticed: compare the bytes the driver will send
+# instead. A UTF-8 byte string passed without the flag must be read as
+# characters, not as Latin-1.
+{
+    my $bytes = "caf\xc3\xa9";
+    my $res   = $class->_searchOnQuery( $gin, 'k', $bytes );
+    is( $res->{query}, qq{${one}a_session ->> 'k' =?},
+        'unflagged UTF-8: query' );
+    my ( $doc, $bind ) = @{ $res->{values} };
+    is( encode( 'UTF-8', $doc ), qq{{"k":"$bytes"}},
+        'unflagged UTF-8: document bytes' );
+    is( encode( 'UTF-8', $bind ), $bytes,
+        'unflagged UTF-8: recheck bind bytes' );
 }
 
 # Patroni inherits this query
