@@ -8,7 +8,9 @@ use Apache::Session::Browseable::Store::LDAP;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::_common;
-use Net::LDAP::Constant qw(LDAP_CONTROL_PAGED);
+use Net::LDAP::Constant
+  qw(LDAP_CONTROL_PAGED LDAP_NO_SUCH_OBJECT LDAP_ASSERTION_FAILED);
+use Net::LDAP::Control::Assertion;
 use Net::LDAP::Control::Paged;
 use Net::LDAP::Util qw(escape_filter_value);
 
@@ -234,6 +236,191 @@ sub get_key_from_all_sessions {
     return \%res;
 }
 
+# Only index values are read: candidates are selected by the directory, then
+# checked in Perl. Returns false if the rule can't be evaluated this way (the
+# caller then falls back to a full scan), true on success; in list context,
+# also the number of deleted sessions. On an error after deletions started,
+# returns false with the number of sessions already deleted.
+sub deleteIfLowerThan {
+    my ( $class, $args, $rule ) = @_;
+    my $filter = $class->_lowerThanFilter( $args, $rule ) or return 0;
+
+    my $ldap =
+      eval { Apache::Session::Browseable::Store::LDAP->fromArgs($args)->ldap };
+    unless ($ldap) {
+        print STDERR "deleteIfLowerThan: unable to connect: $@\n";
+        return 0;
+    }
+
+    # Collect first: nothing is deleted if the search fails
+    my @found;
+    my $msg = $class->_pagedSearch(
+        $ldap,
+        sub {
+            my $entry  = shift;
+            my @values = $entry->get_value( $args->{ldapAttributeIndex} );
+            push @found, [ $entry->dn, @values ]
+              if $class->_matchLowerThan( $rule, @values );
+        },
+        base   => $args->{ldapConfBase},
+        scope  => 'one',
+        filter => $filter,
+        attrs  => [ $args->{ldapAttributeIndex} ],
+    );
+    my ( $ok, $deleted ) = ( 1, 0 );
+    foreach ( $msg ? () : @found ) {
+        my ( $dn, @values ) = @$_;
+        my $keep;
+        ( $keep, $msg ) =
+          $class->_notInContent( $ldap, $args, $rule, $dn, @values );
+        last if $msg;
+        next if $keep;
+
+        # Don't delete sessions updated since the search
+        my $res = $ldap->delete(
+            $dn,
+            control => [
+                Net::LDAP::Control::Assertion->new(
+                    assertion =>
+                      $class->_lowerThanAssertion( $args, $rule, @values )
+                )
+            ]
+        );
+        if ( !$res->code ) {
+            $deleted++;
+        }
+
+        # Already removed (by a logout for example) or updated
+        elsif ( $res->code != LDAP_NO_SUCH_OBJECT
+            and $res->code != LDAP_ASSERTION_FAILED )
+        {
+            $msg = $res;
+            last;
+        }
+    }
+    if ($msg) {
+        print STDERR 'deleteIfLowerThan: LDAP error '
+          . $msg->code . ': '
+          . $msg->error . "\n";
+        $ok = 0;
+    }
+    $ldap->unbind();
+    $ldap->disconnect();
+
+    return wantarray ? ( $ok, $deleted ) : $ok;
+}
+
+# A session written before a "not" field was added to Index has no index
+# value for it: read its content. Returns true if the session must be kept,
+# and the failed LDAP message if any
+sub _notInContent {
+    my ( $class, $ldap, $args, $rule, $dn, @values ) = @_;
+    my $not   = $rule->{not} || {};
+    my @stale = grep {
+        my $prefix = "${_}_";
+        !grep { index( $_, $prefix ) == 0 } @values
+    } sort keys %$not;
+    return 0 unless @stale;
+
+    my $msg = $ldap->search(
+        base   => $dn,
+        scope  => 'base',
+        filter => '(objectClass=*)',
+        attrs  => [ $args->{ldapAttributeContent} ],
+    );
+    return ( 1, $msg ) if ( $msg->code and $msg->code != LDAP_NO_SUCH_OBJECT );
+    my $data = eval {
+        unserialize(
+            $msg->shift_entry->get_value( $args->{ldapAttributeContent} ) );
+    };
+
+    # Removed meanwhile or unreadable: keep it
+    return 1 unless ( ref $data eq 'HASH' );
+    foreach (@stale) {
+        return 1
+          if ( defined $data->{$_} and lc( $data->{$_} ) eq lc( $not->{$_} ) );
+    }
+    return 0;
+}
+
+# Assertion checking that the index values used to select a session are
+# unchanged: the observed rule values are still there, "not" values still
+# missing
+sub _lowerThanAssertion {
+    my ( $class, $args, $rule, @values ) = @_;
+    my $ou  = $args->{ldapAttributeIndex};
+    my $lt  = $rule->{ exists $rule->{or} ? 'or' : 'and' };
+    my $not = $rule->{not} || {};
+    my $res = '';
+    foreach my $f ( sort keys %$lt ) {
+        $res .= "($ou=" . escape_filter_value($_) . ')'
+          foreach ( grep { index( $_, "${f}_" ) == 0 } @values );
+    }
+    $res .= "(!($ou=" . escape_filter_value("${_}_$not->{$_}") . '))'
+      foreach ( sort keys %$not );
+    return "(&$res)";
+}
+
+# $rule: { or|and => { field => number, ... }, not => { field => value, ... } }
+# Returns the filter selecting candidate entries: those having the "or"/"and"
+# fields and none of the "not" values. Every field must be indexed.
+sub _lowerThanFilter {
+    my ( $class, $args, $rule ) = @_;
+    return unless ( ref $rule eq 'HASH' );
+    my @op = grep { exists $rule->{$_} } qw(or and);
+    return unless ( @op == 1 );
+    my $lt  = $rule->{ $op[0] };
+    my $not = $rule->{not} || {};
+    return unless ( ref $lt eq 'HASH' and %$lt and ref $not eq 'HASH' );
+    foreach ( values %$lt ) {
+        unless ( defined $_ and !ref $_ and $_ =~ $numRe ) {
+            print STDERR "deleteIfLowerThan: threshold must be a number\n";
+            return;
+        }
+    }
+
+    # Empty and "0" values aren't indexed, so "not" can't exclude them
+    foreach ( values %$not ) {
+        return unless ( defined $_ and !ref $_ and $_ );
+    }
+    foreach ( keys %$lt, keys %$not ) {
+        return unless $class->_fieldIsIndexed( $args, $_ );
+    }
+    $class->_defaults($args);
+
+    my @terms  = map { $class->_presenceFilter( $args, $_ ) } sort keys %$lt;
+    my $filter = join '', @terms;
+    $filter = ( $op[0] eq 'or' ? '(|' : '(&' ) . "$filter)" if ( @terms > 1 );
+    foreach ( sort keys %$not ) {
+        $filter .= "(!($args->{ldapAttributeIndex}="
+          . escape_filter_value("${_}_$not->{$_}") . '))';
+    }
+    return "(&(objectClass=$args->{ldapObjectClass})$filter)";
+}
+
+# Checks a rule accepted by _lowerThanFilter() against the index values of an
+# entry. A field is lower only if it has numeric values, all lower.
+sub _matchLowerThan {
+    my ( $class, $rule, @values ) = @_;
+    my $not = $rule->{not} || {};
+    foreach my $f ( keys %$not ) {
+        return 0 if grep { $_ eq "${f}_$not->{$f}" } @values;
+    }
+    my $or = exists $rule->{or};
+    my $lt = $rule->{ $or ? 'or' : 'and' };
+    foreach my $f ( keys %$lt ) {
+        my @nums =
+          grep { /$numRe/ } map { /^\Q$f\E_(.*)\z/s ? $1 : () } @values;
+        my $low = @nums ? 1 : 0;
+        foreach (@nums) {
+            $low = 0 unless ( $class->_cmpNum( $_, $lt->{$f} ) < 0 );
+        }
+        return 1 if ( $low  and $or );
+        return 0 if ( !$low and !$or );
+    }
+    return $or ? 0 : 1;
+}
+
 sub _defaults {
     my ( $class, $args ) = @_;
     $args->{ldapObjectClass}      ||= 'applicationProcess';
@@ -358,10 +545,77 @@ When the field is indexed, sessions are found through their index values:
 sessions whose value is C<0> or empty, or written before the field was added
 to C<Index>, are missed until they are rewritten.
 
+=head2 deleteIfLowerThan()
+
+  my ( $ok, $count ) = Apache::Session::Browseable::LDAP->deleteIfLowerThan(
+      $args,
+      {
+          not => { _session_kind => 'Persistent' },
+          or  => { _utime => time - 7200, _lastSeen => time - 3600 },
+      }
+  );
+
+Deletes sessions where one (C<or>) or all (C<and>) of the given fields are
+strictly lower than their threshold, and where each C<not> field is missing
+or has another value. Exactly one of C<or> and C<and> must be given, and
+thresholds must be decimal numbers. A missing field, or one which isn't a
+number, is never lower.
+
+Only the index is used: every field of the rule must be listed in C<Index>.
+For Lemonldap::NG sessions purge, index C<_session_kind> and C<_utime>, plus
+C<_lastSeen> when "timeoutActivity" is set and C<_oidcRtUpdate> for
+searchLt() (see above), for example:
+
+  Index => '_whatToTrace _session_kind _utime _lastSeen _oidcRtUpdate ipAddr'
+
+The directory selects the sessions having the C<or>/C<and> fields and none of
+the C<not> values, for example:
+
+  (&(objectClass=applicationProcess)(|(ou=_lastSeen_*)(ou=_utime_*))
+    (!(ou=_session_kind_Persistent)))
+
+Only their DN and index values are read; numbers are compared in Perl, then
+the matching entries are deleted. As with searchLt(), no filter can select
+lower numbers: C<ou> has no ordering rule, and a substring filter can't tell
+C<99> from C<9900000000>. So the index values of all the candidate sessions
+are read, but much less data than the full scan used otherwise.
+
+The serialized session is only read when a matching session has no index
+value for a C<not> field (written before this field was added to C<Index>):
+it is kept if its content has the C<not> value.
+
+Each deletion carries an assertion control (RFC 4528) checking that the index
+values seen by the search haven't changed: a session updated in the meantime
+is not deleted. Servers that don't support this control ignore it.
+
+Limits:
+
+=over
+
+=item * The rule fields are read from the index: after adding a field to
+C<Index>, sessions written before are ignored until they are rewritten.
+
+=item * C<not> values are compared with the equality rule of the index
+attribute: case-insensitive for C<ou>, so C<persistent> is also kept.
+
+=item * Fields whose value is empty or C<0> aren't indexed: they are
+considered missing, and a C<not> value empty or C<0> is refused.
+
+=back
+
+Returns false, deleting nothing, if the rule can't be handled this way (non
+indexed field, invalid threshold...) or if the connection or the search
+fails: Lemonldap::NG then falls back to reading all sessions. Otherwise
+returns true and, in list context, the number of deleted sessions (sessions
+removed or updated meanwhile aren't counted). If a deletion fails, stops and
+returns false, and in list context the number of sessions already deleted.
+
+=head2 Size limits
+
 Searches returning many sessions (get_key_from_all_sessions(), searchOn(),
-searchOnExpr(), searchLt(), searchGt()) use the paged results control. With
-OpenLDAP, if the bind DN isn't the rootdn, allow it to read all sessions, for
-example with
+searchOnExpr(), searchLt(), searchGt(), deleteIfLowerThan()) use the paged
+results control. With OpenLDAP, if the bind DN isn't the rootdn, allow it to
+read all sessions, for example with
 C<limits dn.exact="E<lt>bind DNE<gt>" size=unlimited> (this covers paged and
 unpaged searches).
 

@@ -254,4 +254,227 @@ is_deeply(
     'Nested session found from its own branch'
 );
 
+# deleteIfLowerThan()
+$args->{Index} = 'uid _session_kind _utime _lastSeen';
+
+# Creates sessions named by their uid, returns remaining sessions names
+sub createSessions {
+    clean();
+    my %sessions = @_;
+    newSession( { uid => $_, %{ $sessions{$_} } } ) foreach keys %sessions;
+}
+
+sub remaining {
+    my $all = $package->get_key_from_all_sessions( $args, 'uid' );
+    return [ sort map { $_->{uid} } values %$all ];
+}
+
+my %llng = (
+    equal      => { _session_kind => 'SSO',        _utime => 1000 },
+    lower      => { _session_kind => 'SSO',        _utime => 999 },
+    shorter    => { _session_kind => 'SSO',        _utime => 99 },
+    longer     => { _session_kind => 'SSO',        _utime => 10000 },
+    decimal    => { _session_kind => 'SSO',        _utime => '999.9' },
+    persistent => { _session_kind => 'Persistent', _utime => 5 },
+    nokind     => { _utime        => 5 },
+    inactive   => { _session_kind => 'SSO', _utime => 1500, _lastSeen => 900 },
+    active     => { _session_kind => 'SSO', _utime => 1500, _lastSeen => 1000 },
+    onlyLast   => { _session_kind => 'SSO', _lastSeen => 5 },
+    noTime     => { _session_kind => 'SSO' },
+    nan        => { _session_kind => 'SSO', _utime => 'abc' },
+);
+createSessions(%llng);
+my @r;
+{
+    local $Apache::Session::Browseable::LDAP::PageSize = 3;
+    @r = $package->deleteIfLowerThan(
+        $args,
+        {
+            not => { _session_kind => 'Persistent' },
+            or  => { _utime        => 1000, _lastSeen => 1000 }
+        }
+    );
+}
+is_deeply( \@r, [ 1, 6 ], 'deleteIfLowerThan (or + not): 6 deleted' );
+is_deeply(
+    remaining(),
+    [qw(active equal longer nan noTime persistent)],
+    'deleteIfLowerThan (or + not): remaining sessions'
+);
+
+# Nothing left to delete
+@r = $package->deleteIfLowerThan( $args,
+    { not => { _session_kind => 'Persistent' }, or => { _utime => 1000 } } );
+is_deeply( \@r, [ 1, 0 ], 'deleteIfLowerThan: nothing to delete' );
+
+# and
+createSessions(
+    both    => { _utime => 1, _lastSeen => 1 },
+    oneLow  => { _utime => 1, _lastSeen => 100 },
+    noLast  => { _utime => 1 },
+    noneLow => { _utime => 100, _lastSeen => 100 },
+);
+ok(
+    scalar $package->deleteIfLowerThan(
+        $args, { and => { _utime => 100, _lastSeen => 100 } }
+    ),
+    'deleteIfLowerThan (and): scalar context'
+);
+is_deeply(
+    remaining(),
+    [qw(noLast noneLow oneLow)],
+    'deleteIfLowerThan (and): remaining sessions'
+);
+
+# Unsupported rules: false, nothing deleted
+createSessions(%llng);
+my $before = remaining();
+my $err    = stderrOf(
+    sub {
+        foreach (
+            [ { or => { foo => 10**9 } }, 'non indexed field' ],
+            [
+                { or => { _utime => 10**9 }, not => { foo => 'a' } },
+                'non indexed "not" field'
+            ],
+            [ { or  => { _utime => 'abc' } },    'invalid threshold' ],
+            [ { or  => { _utime => '1e9' } },    'exponent threshold' ],
+            [ { or  => { _utime => '(cn=*)' } }, 'filter as threshold' ],
+            [ { and => {} }, 'no field' ],
+          )
+        {
+            my @r = $package->deleteIfLowerThan( $args, $_->[0] );
+            ok( !$r[0], "deleteIfLowerThan: $_->[1] returns false" );
+        }
+    }
+);
+like( $err, qr/threshold must be a number/, 'Invalid threshold is reported' );
+is_deeply( remaining(), $before, 'Unsupported rules deleted nothing' );
+
+# Connection error: false
+$err = stderrOf(
+    sub {
+        @r = $package->deleteIfLowerThan(
+            { %$args, ldapServer => 'ldap://127.0.0.1:1' },
+            { or                 => { _utime => 10**9 } } );
+    }
+);
+ok( !$r[0], 'deleteIfLowerThan: connection error returns false' );
+like( $err, qr/unable to connect/, 'Connection error is reported' );
+is_deeply( remaining(), $before, 'Connection error deleted nothing' );
+
+# Search error: false
+$err = stderrOf(
+    sub {
+        @r = $package->deleteIfLowerThan(
+            { %$args, ldapConfBase => "ou=missing,$container" },
+            { or                   => { _utime => 10**9 } } );
+    }
+);
+is_deeply( \@r, [ 0, 0 ], 'deleteIfLowerThan: search error returns false' );
+like( $err, qr/LDAP error 32/, 'Search error is reported' );
+
+# Delete errors
+{
+
+    package MockResult;
+    sub code  { 50 }
+    sub error { 'denied' }
+}
+my $origDelete = \&Net::LDAP::delete;
+createSessions( map { ( $_ => { _utime => 1 } ) } qw(a b c) );
+{
+    no warnings 'redefine';
+    my $n = 0;
+    local *Net::LDAP::delete = sub {
+        my ( $l, $dn ) = @_;
+
+        # First session removed meanwhile (logout), then an error
+        $origDelete->( $ldap, $dn ) if ( $n == 0 );
+        return bless {}, 'MockResult' if ( $n++ == 2 );
+        return $origDelete->(@_);
+    };
+    $err = stderrOf(
+        sub {
+            @r =
+              $package->deleteIfLowerThan( $args, { or => { _utime => 10 } } );
+        }
+    );
+}
+is_deeply(
+    \@r,
+    [ 0, 1 ],
+    'deleteIfLowerThan: delete error returns false and the deleted count'
+);
+like( $err, qr/LDAP error 50: denied/, 'Delete error is reported' );
+is( scalar @{ remaining() }, 1, 'Session not deleted after the error' );
+
+my $llngRule = {
+    not => { _session_kind => 'Persistent' },
+    or  => { _utime        => 1000, _lastSeen => 1000 }
+};
+
+# Sessions written before _session_kind was indexed: their content is read
+createSessions( sso => { _session_kind => 'SSO', _utime => 5 } );
+foreach (qw(Persistent persistent SSO)) {
+    newSession( { uid => "old$_", _session_kind => $_, _utime => 5 },
+        { %$args, Index => 'uid _utime' } );
+}
+@r = $package->deleteIfLowerThan( $args, $llngRule );
+is_deeply( \@r, [ 1, 2 ], 'Stale "not" index: 2 deleted' );
+is_deeply(
+    remaining(),
+    [qw(oldPersistent oldpersistent)],
+    'Stale "not" index: Persistent sessions kept'
+);
+
+# Sessions in nested branches aren't deleted
+createSessions( top => { _utime => 5 } );
+$ldap->add( $nested,
+    attrs => [ objectClass => 'organizationalUnit', ou => 'nested' ] );
+$nestedId = newSession( { uid => 'nested', _utime => 5 },
+    { %$args, ldapConfBase => $nested } );
+@r = $package->deleteIfLowerThan( $args, $llngRule );
+is_deeply( \@r, [ 1, 1 ], 'Nested branch: only 1 deleted' );
+ok(
+    $package->get_key_from_all_sessions( { %$args, ldapConfBase => $nested } )
+      ->{$nestedId},
+    'Nested branch: session kept'
+);
+
+# Sessions updated between the search and the deletion are kept
+createSessions( map { ( $_ => { _utime => 5, _lastSeen => 5 } ) } qw(a b) );
+{
+    no warnings 'redefine';
+    my $n = 0;
+    local *Net::LDAP::delete = sub {
+        my ( $l, $dn ) = @_;
+
+        # First session refreshed meanwhile
+        if ( $n++ == 0 ) {
+            my $e = $ldap->search(
+                base   => $dn,
+                scope  => 'base',
+                filter => '(objectClass=*)',
+                attrs  => ['ou']
+            )->shift_entry;
+            $ldap->modify(
+                $dn,
+                replace => {
+                    ou => [
+                        map {
+                            ( my $v = $_ ) =~ s/^(_utime|_lastSeen)_.*/$1_2000/;
+                            $v
+                        } $e->get_value('ou')
+                    ]
+                }
+            );
+        }
+        return $origDelete->(@_);
+    };
+    @r = $package->deleteIfLowerThan( $args, $llngRule );
+}
+is_deeply( \@r, [ 1, 1 ], 'Updated meanwhile: not deleted, not counted' );
+is( scalar @{ remaining() }, 1, 'Updated meanwhile: session kept' );
+
 done_testing();

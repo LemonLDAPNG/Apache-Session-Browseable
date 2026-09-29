@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 61;
+plan tests => 100;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -159,4 +159,128 @@ is(
     $browseable->_presenceFilter( { ldapAttributeIndex => 'ou' }, 'a*b(c)\\' ),
     '(ou=a\2ab\28c\29\5c_*)',
     '_presenceFilter: escaped field'
+);
+
+# _lowerThanFilter
+my $llngRule = {
+    not => { _session_kind => 'Persistent' },
+    or  => { _utime        => 1790560000, _lastSeen => 1790556400 },
+};
+my $fArgs = { Index => '_utime _lastSeen _session_kind uid' };
+sub ltFilter { $browseable->_lowerThanFilter( {%$fArgs}, @_ ) }
+
+is(
+    ltFilter($llngRule),
+    '(&(objectClass=applicationProcess)(|(ou=_lastSeen_*)(ou=_utime_*))'
+      . '(!(ou=_session_kind_Persistent)))',
+    '_lowerThanFilter: LLNG rule'
+);
+is(
+    ltFilter( { and => { _utime => 1, _lastSeen => 2 } } ),
+    '(&(objectClass=applicationProcess)(&(ou=_lastSeen_*)(ou=_utime_*)))',
+    '_lowerThanFilter: and'
+);
+is(
+    ltFilter( { or => { _utime => 1 }, not => undef } ),
+    '(&(objectClass=applicationProcess)(ou=_utime_*))',
+    '_lowerThanFilter: single field, no "not"'
+);
+is(
+    ltFilter( { or => { _utime => 1 }, not => { uid => 'a*)(|(cn=*' } } ),
+    '(&(objectClass=applicationProcess)(ou=_utime_*)'
+      . '(!(ou=uid_a\2a\29\28|\28cn=\2a)))',
+    '_lowerThanFilter: "not" value escaped'
+);
+is(
+    $browseable->_lowerThanFilter(
+        {
+            %$fArgs,
+            ldapObjectClass    => 'device',
+            ldapAttributeIndex => 'l',
+        },
+        { or => { _utime => 1 } }
+    ),
+    '(&(objectClass=device)(l=_utime_*))',
+    '_lowerThanFilter: custom objectClass and index attribute'
+);
+
+{
+    # Rejected rules; hide "threshold must be a number" messages
+    local *STDERR;
+    open STDERR, '>', \my $err;
+    foreach (
+        [ undef, 'no rule' ],
+        [ {},    'no or/and' ],
+        [ { not => { uid => 'a' } }, 'only not' ],
+        [ { or  => {} },             'empty or' ],
+        [ { or  => [] },             'or is not a hash' ],
+        [ { or  => { _utime => 1 }, and => { _utime => 1 } }, 'or + and' ],
+        [ { or  => { _utime => 'abc' } },                     'threshold abc' ],
+        [ { or  => { _utime => '1e3' } },                     'threshold 1e3' ],
+        [ { or  => { _utime => '1 OR 1' } }, 'threshold 1 OR 1' ],
+        [ { or  => { _utime => undef } },    'threshold undef' ],
+        [ { or  => { foo => 1 } },           'field not indexed' ],
+        [
+            { or => { _utime => 1 }, not => { foo => 'a' } },
+            '"not" not indexed'
+        ],
+        [ { or => { _utime => 1 }, not => { uid => '0' } }, '"not" 0' ],
+        [ { or => { _utime => 1 }, not => { uid => '' } },  '"not" empty' ],
+        [ { or => { _utime => 1 }, not => 'uid' }, '"not" not a hash' ],
+      )
+    {
+        ok( !defined ltFilter( $_->[0] ), "_lowerThanFilter rejects $_->[1]" );
+    }
+}
+
+# _matchLowerThan
+foreach (
+    [ [qw(_utime_999)],                    1, 'lower' ],
+    [ [qw(_utime_1790560000)],             0, 'equal' ],
+    [ [qw(_utime_1790560001)],             0, 'greater' ],
+    [ [qw(_utime_99)],                     1, 'shorter' ],
+    [ [qw(_utime_10000000000)],            0, 'longer' ],
+    [ [qw(_utime_0999999999)],             1, 'leading zero' ],
+    [ [qw(_utime_1790559999.5)],           1, 'decimal' ],
+    [ [qw(_utime_abc)],                    0, 'not a number' ],
+    [ [qw(uid_dwho)],                      0, 'no field' ],
+    [ [qw(_utime_x_1 _utimex_1)],          0, 'other fields with same prefix' ],
+    [ [qw(_utime_1790560000 _lastSeen_1)], 1, 'or: second field lower' ],
+    [ [qw(_utime_1 _session_kind_Persistent)],  0, 'not: excluded' ],
+    [ [qw(_utime_1 _session_kind_SSO)],         1, 'not: other value' ],
+    [ [qw(_utime_1 _session_kind_Persistent2)], 1, 'not: exact value' ],
+  )
+{
+    is( $browseable->_matchLowerThan( $llngRule, @{ $_->[0] } ) ? 1 : 0,
+        $_->[1], "_matchLowerThan (or): $_->[2]" );
+}
+my $andRule = { and => { _utime => 100, _lastSeen => 100 } };
+foreach (
+    [ [qw(_utime_1 _lastSeen_1)],   1, 'both lower' ],
+    [ [qw(_utime_1 _lastSeen_100)], 0, 'one equal' ],
+    [ [qw(_utime_1)],               0, 'one missing' ],
+  )
+{
+    is( $browseable->_matchLowerThan( $andRule, @{ $_->[0] } ) ? 1 : 0,
+        $_->[1], "_matchLowerThan (and): $_->[2]" );
+}
+
+# _lowerThanAssertion: observed rule values, "not" values still missing
+is(
+    $browseable->_lowerThanAssertion(
+        { ldapAttributeIndex => 'ou' },
+        $llngRule,
+        qw(_utime_5 uid_dwho _lastSeen_4 _session_kind_SSO)
+    ),
+    '(&(ou=_lastSeen_4)(ou=_utime_5)(!(ou=_session_kind_Persistent)))',
+    '_lowerThanAssertion'
+);
+is(
+    $browseable->_lowerThanAssertion(
+        { ldapAttributeIndex => 'ou' },
+        { and                => { a => 1 }, not => { b => 'x*' } },
+        'a_1)(x', 'b_y'
+    ),
+    '(&(ou=a_1\29\28x)(!(ou=b_x\2a)))',
+    '_lowerThanAssertion: escaped values'
 );
