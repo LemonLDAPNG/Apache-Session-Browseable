@@ -80,8 +80,12 @@ $ids = reset_sessions(
     b => { _utime => 400, _lastSeen => 100 },
     c => { _utime => 400, _lastSeen => 400 },
 );
-ok( $class->deleteIfLowerThan( $args, { or => { _utime => 250, _lastSeen => 250 } } ),
-    'or with 2 fields' );
+ok(
+    $class->deleteIfLowerThan(
+        $args, { or => { _utime => 250, _lastSeen => 250 } }
+    ),
+    'or with 2 fields'
+);
 is( remaining($ids), 'c', 'or: session "c" remains' );
 
 # 2. deleteIfLowerThan with "and"
@@ -102,7 +106,8 @@ $ids = reset_sessions(
     nokind  => { _utime => 100 },
     recent  => { _utime => 300, _session_kind => 'SSO' },
 );
-my $rule = { or => { _utime => 250 }, not => { _session_kind => 'Persistent' } };
+my $rule =
+  { or => { _utime => 250 }, not => { _session_kind => 'Persistent' } };
 @res = $class->deleteIfLowerThan( $args, $rule );
 is_deeply( \@res, [ 1, 2 ], 'not: 2 sessions deleted' );
 is( remaining($ids), 'persist,recent',
@@ -177,6 +182,62 @@ ok( $class->deleteIfLowerThan( $args, { or => { _utime => '100.5' } } ),
 ok( $class->deleteIfLowerThan( $args, { or => { _utime => '-1' } } ),
     'negative threshold accepted' );
 
-unlink $dbfile if ( -e $dbfile );
+# 8. searchOnExpr() on a value containing a quote
+$ids = reset_sessions(
+    obrien  => { uid => "O'Brien",  f3 => "O'Brien" },
+    obriena => { uid => "O'Briena", f3 => "O'Briena" },
+    other   => { uid => 'OBrien',   f3 => 'OBrien' },
+);
+my %rev = reverse %$ids;
+$res = $class->searchOnExpr( $args, 'uid', "O'Brien*" );
+is( join( ',', sort map { $rev{$_} } keys %$res ),
+    'obrien,obriena', 'searchOnExpr with a quote on an indexed field' );
+$res = $class->searchOnExpr( $args, 'uid', "O'Brien*", 'uid' );
+is( join( ',', sort map { $res->{$_}->{uid} } keys %$res ),
+    "O'Brien,O'Briena",
+    'searchOnExpr with a quote on an indexed field, with fields' );
+$res = $class->searchOnExpr( $args, 'f3', "O'Brien*" );
+is( join( ',', sort map { $rev{$_} } keys %$res ),
+    'obrien,obriena', 'searchOnExpr with a quote on an unindexed field' );
+$res = $class->searchOn( $args, 'uid', "O'Brien" );
+is( join( ',', keys %$res ),
+    $ids->{obrien}, 'searchOn with a quote on an indexed field' );
+
+# 9. Caller data must not be modified
+my $fields = [ 'uid', '_utime' ];
+$res = $class->get_key_from_all_sessions( $args, $fields );
+is( $res->{ $ids->{obrien} }->{uid},
+    "O'Brien", 'get_key_from_all_sessions with indexed fields' );
+is_deeply( $fields, [ 'uid', '_utime' ], 'Fields list not modified' );
+
+my $qargs = { %$args, Index => [ 'uid', "a'b" ] };
+$fields = [ 'uid', "a'b" ];
+quiet {
+    eval { $class->get_key_from_all_sessions( $qargs, $fields ) }
+};
+is_deeply(
+    $fields,
+    [ 'uid', "a'b" ],
+    'Fields list not modified (field containing a quote)'
+);
+
+require Apache::Session::Browseable::Store::SQLite;
+my $store = Apache::Session::Browseable::Store::SQLite->new;
+quiet {
+    eval {
+        $store->insert(
+            {
+                args       => $qargs,
+                data       => { _session_id => 'x' },
+                serialized => '{}'
+            }
+        );
+    }
+};
+is_deeply( $qargs->{Index}, [ 'uid', "a'b" ], 'Store: Index not modified' );
 
 done_testing();
+
+END {
+    unlink $dbfile if ( $dbfile and -e $dbfile );
+}
