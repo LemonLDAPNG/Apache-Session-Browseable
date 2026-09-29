@@ -10,13 +10,14 @@ run_tests(
     create => [
         'CREATE TABLE __TABLE__ (id varchar(64) not null primary key,'
           . ' a_session text, uid text, _whatToTrace text, _session_kind text,'
-          . ' _utime bigint, _lastSeen bigint)',
+          . ' _utime bigint, _lastSeen bigint, _oidcRtUpdate bigint)',
         'CREATE INDEX __TABLE___u1 ON __TABLE__ (_utime)',
         'CREATE INDEX __TABLE___ls1 ON __TABLE__ (_lastSeen)',
+        'CREATE INDEX __TABLE___rt1 ON __TABLE__ (_oidcRtUpdate)',
         'CREATE INDEX __TABLE___uid1 ON __TABLE__'
           . ' USING BTREE (_whatToTrace text_pattern_ops)',
     ],
-    index => 'uid _whatToTrace _session_kind _utime _lastSeen',
+    index => 'uid _whatToTrace _session_kind _utime _lastSeen _oidcRtUpdate',
     todo  => {
         searchOnExprQuote => 'quotes are doubled although the value is bound',
         deleteNot    => 'sessions without the "not" field are never deleted',
@@ -28,6 +29,9 @@ run_tests(
         my ( $ut, $ls ) =
           map { $class->_buildLowerThanExpression( $_, 200 ) }
           qw(_utime _lastSeen);
+        my ( $rtlt, $rtgt ) =
+          map { $class->_buildCompareExpression( '_oidcRtUpdate', $_, 200 ) }
+          qw(< >);
         my $sk = '_session_kind';
         return (
             [ 'deleteIfLowerThan', $ut, '__TABLE___u1' ],
@@ -38,6 +42,8 @@ run_tests(
             ],
             [ 'searchOnExpr', "_whatToTrace LIKE 'dw%'", '__TABLE___uid1' ],
             [ 'searchOn',     "_whatToTrace = 'dwho'",   '__TABLE___uid1' ],
+            [ 'searchLt',     $rtlt,                     '__TABLE___rt1' ],
+            [ 'searchGt',     $rtgt,                     '__TABLE___rt1' ],
         );
     },
 );

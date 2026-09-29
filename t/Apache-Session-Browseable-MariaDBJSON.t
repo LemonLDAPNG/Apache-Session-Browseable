@@ -43,6 +43,9 @@ subtest 'Generated columns' => sub {
               . ' _lastSeen bigint unsigned'
               . " AS (cast(JSON_VALUE(a_session, '\$._lastSeen') as unsigned))"
               . ' VIRTUAL,'
+              . ' _oidcRtUpdate bigint unsigned AS'
+              . " (cast(JSON_VALUE(a_session, '\$._oidcRtUpdate') as unsigned))"
+              . ' VIRTUAL,'
               . ' ipAddr varchar(64) COLLATE utf8mb4_bin'
               . " AS (JSON_VALUE(a_session, '\$.ipAddr')) VIRTUAL,"
               . " `weird'field` varchar(8) COLLATE utf8mb4_bin"
@@ -51,18 +54,17 @@ subtest 'Generated columns' => sub {
               . " AS (JSON_VALUE(a_session, '\$.\"$accented\"')) VIRTUAL,"
               . ' KEY _whatToTrace (_whatToTrace),'
               . ' KEY _session_kind (_session_kind), KEY _utime (_utime),'
-              . ' KEY _lastSeen (_lastSeen), KEY ipAddr (ipAddr),'
-              . " KEY weird (`weird'field`),"
+              . ' KEY _lastSeen (_lastSeen), KEY _oidcRtUpdate (_oidcRtUpdate),'
+              . " KEY ipAddr (ipAddr), KEY weird (`weird'field`),"
               . " KEY `$accented` (`$accented`)) ENGINE=InnoDB"
         ],
-        index => "_whatToTrace _session_kind _utime _lastSeen ipAddr"
-          . " weird'field $accented",
-        json         => 1,
-        null         => 1,
-        utf8         => 1,
-        exact        => 1,
-        weird        => [ "weird'field", 'a"b\\c', 'a?b', 'x\\', 'a.b',
-            $accented ],
+        index => "_whatToTrace _session_kind _utime _lastSeen _oidcRtUpdate"
+          . " ipAddr weird'field $accented",
+        json  => 1,
+        null  => 1,
+        utf8  => 1,
+        exact => 1,
+        weird => [ "weird'field", 'a"b\\c', 'a?b', 'x\\', 'a.b', $accented ],
         explain_key  => 1,
         explain_fill => 100,
         explain      => sub {
@@ -73,6 +75,10 @@ subtest 'Generated columns' => sub {
             my ( $ut, $ls ) =
               map { $class->_buildLowerThanExpression( $_, 200, $dbh, $args ) }
               qw(_utime _lastSeen);
+            my ( $rtlt, $rtgt ) = map {
+                $class->_buildCompareExpression( '_oidcRtUpdate', $_, 200,
+                    $dbh, $args )
+            } qw(< >);
             my $not = "($sk IS NULL OR $sk <> 'Persistent')";
             return (
                 [ 'searchOn',     "$wt = 'dwho'",            '_whatToTrace' ],
@@ -89,6 +95,8 @@ subtest 'Generated columns' => sub {
                     [ '_utime', '_lastSeen' ],
                     'DELETE'
                 ],
+                [ 'searchLt', $rtlt, '_oidcRtUpdate' ],
+                [ 'searchGt', $rtgt, '_oidcRtUpdate' ],
             );
         },
     );

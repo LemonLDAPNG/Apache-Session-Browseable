@@ -159,12 +159,16 @@ Create table. Example for Lemonldap::NG with generated columns and indexes:
           AS (cast(JSON_VALUE(a_session, '$._utime') as unsigned)) VIRTUAL,
       _lastSeen bigint unsigned
           AS (cast(JSON_VALUE(a_session, '$._lastSeen') as unsigned)) VIRTUAL,
+      _oidcRtUpdate bigint unsigned
+          AS (cast(JSON_VALUE(a_session, '$._oidcRtUpdate') as unsigned))
+          VIRTUAL,
       ipAddr varchar(64) COLLATE utf8mb4_bin
           AS (JSON_VALUE(a_session, '$.ipAddr')) VIRTUAL,
       KEY _whatToTrace (_whatToTrace),
       KEY _session_kind (_session_kind),
       KEY _utime (_utime),
       KEY _lastSeen (_lastSeen),
+      KEY _oidcRtUpdate (_oidcRtUpdate),
       KEY ipAddr (ipAddr)
   ) ENGINE=InnoDB;
 
@@ -181,7 +185,8 @@ Use it with Perl:
        Password   => $db_pass,
 
        # Fields that have a generated column
-       Index      => '_whatToTrace _session_kind _utime _lastSeen ipAddr',
+       Index      => '_whatToTrace _session_kind _utime _lastSeen'
+                   . ' _oidcRtUpdate ipAddr',
   };
 
 The DSN selects the driver: C<dbi:MariaDB:...> requires DBD::MariaDB and
@@ -238,16 +243,16 @@ fields are compared exactly.
 
 =item *
 
-C<_utime>, C<_lastSeen> (and other indexed fields used by
-deleteIfLowerThan()) must be integer columns: deleteIfLowerThan() compares
-the column directly (it casts other fields to C<unsigned>).
+C<_utime>, C<_lastSeen>, C<_oidcRtUpdate> (and other indexed fields used by
+deleteIfLowerThan(), searchLt() or searchGt()) must be integer columns: these
+methods compare the column directly (they cast other fields to C<unsigned>).
 
 =item *
 
 With strict SQL mode, a value that doesn't fit into its column (too
-long string, non-integer C<_utime> or C<_lastSeen>) makes the session storage
-fail: size C<varchar> columns generously; Lemonldap::NG always writes integer
-C<_utime> and C<_lastSeen>.
+long string, non-integer C<_utime>, C<_lastSeen> or C<_oidcRtUpdate>) makes
+the session storage fail: size C<varchar> columns generously; Lemonldap::NG
+always writes integer C<_utime>, C<_lastSeen> and C<_oidcRtUpdate>.
 
 =back
 
@@ -255,6 +260,10 @@ C<_lastSeen> is needed when Lemonldap::NG "timeoutActivity" is used: sessions
 purge then deletes sessions whose C<_utime> B<or> C<_lastSeen> is too old,
 and an C<OR> with a non indexed side forces a full table scan (with both
 columns, MariaDB uses an C<index_merge>).
+
+C<_oidcRtUpdate> is useful when OpenID Connect relying parties have a refresh
+token activity timeout: sessions purge then calls searchLt() on
+C<_oidcRtUpdate>.
 
 Fields that are not listed in C<Index> are read with
 C<JSON_VALUE(a_session, '$.field')>. C<JSON_VALUE> returns C<NULL> for missing

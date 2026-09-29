@@ -264,6 +264,8 @@ Optionally, add indexes on some fields. Example for Lemonldap::NG:
   CREATE INDEX  u1  ON sessions ( ( cast(a_session ->> '_utime' AS bigint) ) );
   CREATE INDEX ls1  ON sessions
     ( ( cast(a_session ->> '_lastSeen' AS bigint) ) );
+  CREATE INDEX rt1  ON sessions
+    ( ( cast(a_session ->> '_oidcRtUpdate' AS bigint) ) );
   CREATE INDEX ip1  ON sessions USING BTREE
     ( (a_session ->> 'ipAddr') text_pattern_ops );
 
@@ -277,6 +279,10 @@ deleteIfLowerThan() can use C<u1> and C<ls1> indexes only if they are declared
 exactly as above. C<ls1> is needed when Lemonldap::NG "timeoutActivity" is
 used: sessions purge then deletes sessions whose C<_utime> B<or> C<_lastSeen>
 is too old, and an C<OR> with a non indexed side forces a full table scan.
+
+C<rt1> is useful when OpenID Connect relying parties have a refresh token
+activity timeout: sessions purge then calls searchLt() on C<_oidcRtUpdate>,
+which can use this index only if it is declared exactly as above.
 
 Avoid a global C<GIN (a_session jsonb_path_ops)> index: queries of this module
 don't use the C<@E<gt>> operator, so it is never used. Measured on 300,000
@@ -309,9 +315,9 @@ around the value are ignored.
 
 Fields are compared in SQL as deleteIfLowerThan() does
 (C<cast(a_session -E<gt>E<gt> 'field' AS bigint)>): an expression index
-declared exactly as C<u1> above is used with an integer value. As for
-deleteIfLowerThan(), the query fails if the field of a session is not an
-integer.
+declared exactly as C<u1> or C<rt1> above is used with an integer value. As
+for deleteIfLowerThan(), the query fails if it reads a session where this
+field is not an integer.
 
 Sessions without the field are never returned. This differs from the Perl
 fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()

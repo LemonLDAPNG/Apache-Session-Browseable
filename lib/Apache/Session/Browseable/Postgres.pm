@@ -117,6 +117,7 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
       _session_kind text,
       _utime bigint,
       _lastSeen bigint,
+      _oidcRtUpdate bigint,
       ipAddr varchar(64)
   );
 
@@ -126,6 +127,7 @@ Add indexes:
   CREATE INDEX s1   ON sessions (_session_kind);
   CREATE INDEX u1   ON sessions (_utime);
   CREATE INDEX ls1  ON sessions (_lastSeen);
+  CREATE INDEX rt1  ON sessions (_oidcRtUpdate);
   CREATE INDEX ip1  ON sessions USING BTREE (ipAddr varchar_pattern_ops);
 
 searchOnExpr() uses C<LIKE 'prefix%'> queries: unless the database uses the
@@ -152,6 +154,11 @@ every session write fail. First create the column and its index:
 then backfill it (see L<Apache::Session::Browseable/"ADDING A COLUMN TO Index ON AN EXISTING TABLE">)
 and only then add C<_lastSeen> to C<Index>.
 
+C<_oidcRtUpdate> column and index are useful when OpenID Connect relying
+parties have a refresh token activity timeout: sessions purge then calls
+searchLt() on C<_oidcRtUpdate>, which reads all sessions unless this field is
+in C<Index>.
+
 Use it with Perl:
 
   use Apache::Session::Browseable::Postgres;
@@ -163,7 +170,8 @@ Use it with Perl:
        Commit     => 1,
 
        # Choose your browseable fileds
-       Index      => '_whatToTrace _session_kind _utime _lastSeen ipAddr',
+       Index      => '_whatToTrace _session_kind _utime _lastSeen'
+                   . ' _oidcRtUpdate ipAddr',
   };
   
   # Use it like Apache::Session
