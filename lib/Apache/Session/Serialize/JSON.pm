@@ -6,6 +6,8 @@ use JSON qw(to_json from_json);
 
 our $VERSION = '1.2.6';
 
+my $utf8Json = JSON->new->utf8->allow_nonref;
+
 sub serialize {
     my $session = shift;
 
@@ -23,6 +25,15 @@ sub unserialize {
 sub _unserialize {
     my ( $serialized, $next ) = @_;
     my $tmp;
+
+    # Some stores (MySQL json columns, files,...) return UTF-8 bytes
+    if (    defined $serialized
+        and !utf8::is_utf8($serialized)
+        and $serialized =~ /[\x80-\xff]/ )
+    {
+        $tmp = eval { $utf8Json->decode($serialized) };
+        return $tmp unless ($@);
+    }
     eval { $tmp = from_json( $serialized, { allow_nonref => 1 } ) };
     if ($@) {
         require Storable;
@@ -54,6 +65,10 @@ Apache::Session::Serialize::JSON - Use JSON to zip up data
 This module fulfills the serialization interface of Apache::Session.
 It serializes the data in the session object by use of JSON C<to_json>
 and C<from_json>. The serialized data is UTF-8 text.
+
+When reading, a string returned as bytes by the store (not flagged as UTF-8,
+for example a MySQL C<json> column) is first decoded as UTF-8 JSON; if it is
+not valid UTF-8, it is read as characters.
 
 
 =head1 SEE ALSO
