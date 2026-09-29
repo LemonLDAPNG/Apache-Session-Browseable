@@ -11,9 +11,6 @@ package SQLBackendTests;
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
-#
-# ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
-# of table names.
 
 use strict;
 use warnings;
