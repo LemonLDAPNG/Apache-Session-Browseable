@@ -5,6 +5,7 @@ use strict;
 use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::Postgres;
+use Apache::Session::Browseable::_common;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::Hstore;
 
@@ -89,7 +90,9 @@ sub _query {
 
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
-    my $query;
+    my ( $query, @bind );
+    return 0
+      unless ( Apache::Session::Browseable::_common->_checkThresholds($rule) );
     if ( $rule->{or} ) {
         $query = join ' OR ',
           map { "cast(a_session -> '$_' as bigint) < $rule->{or}->{$_}" }
@@ -97,20 +100,24 @@ sub deleteIfLowerThan {
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ',
-          map { "cast(a_session -> '$_' as bigint) < $rule->{or}->{$_}" }
-          keys %{ $rule->{or} };
-    }
-    if ( $rule->{not} ) {
-        $query = "($query) AND "
-          . join( ' AND ',
-            map { "a_session -> '$_' <> '$rule->{not}->{$_}'" }
-              keys %{ $rule->{not} } );
+          map { "cast(a_session -> '$_' as bigint) < $rule->{and}->{$_}" }
+          keys %{ $rule->{and} };
     }
     return 0 unless ($query);
+    if ( $rule->{not} ) {
+        $query = "($query) AND " . join(
+            ' AND ',
+            map {
+                push @bind, $rule->{not}->{$_};
+                "(a_session -> '$_' IS NULL OR a_session -> '$_' <> ?)"
+              }
+              keys %{ $rule->{not} }
+        );
+    }
     my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do("DELETE FROM $table_name WHERE $query");
+    my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
     return 0 unless defined $rows;
 
     if (wantarray) {

@@ -53,3 +53,4 @@ t/Apache-Session-Browseable-Store-MySQL.t
 t/Apache-Session-Browseable-Store-Patroni.t
 t/test-browseable-functions-using-File.t
 t/test-browseable-functions-using-SQLite.t
+t/test-sql-functions-using-SQLite.t
