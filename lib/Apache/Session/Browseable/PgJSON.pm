@@ -92,12 +92,12 @@ sub deleteIfLowerThan {
     my $query;
     if ( $rule->{or} ) {
         $query = join ' OR ',
-          map { "cast(a_session ->> '$_' as bigint) < $rule->{or}->{$_}" }
+          map { $class->_buildLowerThanExpression( $_, $rule->{or}->{$_} ) }
           keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ',
-          map { "cast(a_session ->> '$_' as bigint) < $rule->{or}->{$_}" }
+          map { $class->_buildLowerThanExpression( $_, $rule->{or}->{$_} ) }
           keys %{ $rule->{or} };
     }
     if ( $rule->{not} ) {
@@ -167,6 +167,12 @@ sub get_key_from_all_sessions {
         }
     );
     return \%res;
+}
+
+# Must match the documented expression indexes (_utime, _lastSeen)
+sub _buildLowerThanExpression {
+    my ( $class, $field, $value ) = @_;
+    return "cast(a_session ->> '$field' as bigint) < $value";
 }
 
 sub _classDbh {

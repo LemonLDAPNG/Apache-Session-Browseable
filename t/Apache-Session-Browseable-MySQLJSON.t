@@ -30,13 +30,15 @@ run_tests(
         deleteNotQuote => '"not" values are not escaped',
     },
     explain => sub {
-        my ( $wt, $sk, $ut ) =
-          map { qq{a_session->>"\$.$_"} } qw(_whatToTrace _session_kind _utime);
+        my ($class) = @_;
+        my ( $wt, $sk ) =
+          map { qq{a_session->>"\$.$_"} } qw(_whatToTrace _session_kind);
+        my $ut = $class->_buildLowerThanExpression( '_utime', 200 );
         return (
-            [ 'deleteIfLowerThan', "cast($ut as UNSIGNED) < 200", 'as_ut' ],
+            [ 'deleteIfLowerThan', $ut, 'as_ut' ],
             [
                 'deleteIfLowerThan with "not"',
-                "(cast($ut as UNSIGNED) < 200) AND $sk <> 'Persistent'",
+                "($ut) AND $sk <> 'Persistent'",
                 'as_ut'
             ],
             [ 'searchOn', "$wt = 'dwho'", 'as_wt' ],

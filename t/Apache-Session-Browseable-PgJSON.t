@@ -21,11 +21,12 @@ run_tests(
         deleteNotQuote => '"not" values are not escaped',
     },
     explain => sub {
+        my ($class) = @_;
         my $wt = "a_session ->> '_whatToTrace'";
-        my $ut = "a_session ->> '_utime'";
         return (
             [
-                'deleteIfLowerThan', "cast($ut as bigint) < 200",
+                'deleteIfLowerThan',
+                $class->_buildLowerThanExpression( '_utime', 200 ),
                 '__TABLE___u1'
             ],
             [ 'searchOnExpr', "$wt like 'dw%'", '__TABLE___uid1' ],

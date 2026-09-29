@@ -78,12 +78,12 @@ sub deleteIfLowerThan {
     my $query;
     if ( $rule->{or} ) {
         $query = join ' OR ',
-          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} }
+          map { $class->_buildLowerThanExpression( $_, $rule->{or}->{$_} ) }
           keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ',
-          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} }
+          map { $class->_buildLowerThanExpression( $_, $rule->{or}->{$_} ) }
           keys %{ $rule->{or} };
     }
     if ( $rule->{not} ) {
@@ -153,6 +153,12 @@ sub get_key_from_all_sessions {
         }
     );
     return \%res;
+}
+
+# Same arguments as in DBI.pm. Must match the documented generated columns
+sub _buildLowerThanExpression {
+    my ( $class, $field, $value ) = @_;
+    return qq{cast(a_session->>"\$.$field" as UNSIGNED) < $value};
 }
 
 sub _classDbh {
