@@ -50,8 +50,8 @@ sub reset_sessions {
 
 sub remaining {
     my ($ids) = @_;
-    my $all = $class->get_key_from_all_sessions($args);
-    my %rev = reverse %$ids;
+    my $all   = $class->get_key_from_all_sessions($args);
+    my %rev   = reverse %$ids;
     return join ',', sort map { $rev{$_} } keys %$all;
 }
 
@@ -208,6 +208,89 @@ ok( $class->deleteIfLowerThan( $args, { or => { _utime => '100.5' } } ),
     'decimal threshold accepted' );
 ok( $class->deleteIfLowerThan( $args, { or => { _utime => '-1' } } ),
     'negative threshold accepted' );
+
+# searchLt() and searchGt(): indexed fields are compared in SQL, other
+# ones in Perl. Both compare "abc" as 0 and "250x" as 250. Sessions without
+# the field are never returned
+$ids = reset_sessions(
+    a    => { _utime => 100,    n => 100 },
+    b    => { _utime => 200,    n => 200 },
+    c    => { _utime => 300,    n => 300 },
+    str  => { _utime => 'abc',  n => 'abc' },
+    pre  => { _utime => '250x', n => '250x' },
+    none => { uid    => 'none' },
+);
+my %rev = reverse %$ids;
+my @sql;
+{
+    my $cdbh = $class->_classDbh($args);
+    local $cdbh->{Callbacks} = {
+        prepare => sub { push @sql, $_[1]; return }
+    };
+    foreach (
+        [ searchLt =>  250,    'a,b,str' ],
+        [ searchGt =>  200,    'c,pre' ],
+        [ searchLt =>  1,      'str' ],
+        [ searchGt => -1,      'a,b,c,pre,str' ],
+        [ searchLt => '250.5', 'a,b,pre,str' ],
+      )
+    {
+        my ( $m, $v, $expected ) = @$_;
+        foreach my $f (qw(_utime n)) {
+            @sql = ();
+            $res = $class->$m( $args, $f, $v );
+            is( join( ',', sort map { $rev{$_} } keys %$res ),
+                $expected, "$m $f $v" );
+            my $op = $m eq 'searchLt' ? '<' : '>';
+            if ( $f eq '_utime' ) {
+                is_deeply(
+                    \@sql,
+                    [
+"SELECT id,a_session from sessions where cast(_utime as integer) $op $v"
+                    ],
+                    "$m $f $v: compared in SQL"
+                );
+            }
+            else {
+                unlike( join( "\n", @sql ),
+                    qr/cast\(/, "$m $f $v: compared in Perl" );
+            }
+        }
+    }
+}
+$res = $class->searchLt( $args, '_utime', 150 );
+is( $res->{ $ids->{a} }->{n}, 100, 'searchLt without fields returns sessions' );
+foreach my $f (qw(_utime n)) {
+    $res = $class->searchGt( $args, $f, 250, $f, 'uid' );
+    is_deeply( [ map { $_->{$f} } values %$res ],
+        [300], "searchGt $f with fields: 1 session" );
+    is(
+        join( ',', sort grep { $_ ne 'id' } keys %{ ( values %$res )[0] } ),
+        join( ',', sort $f, 'uid' ),
+        "searchGt $f with fields: requested fields"
+    );
+}
+foreach my $bad ( '100 OR 1=1', '1e3', '', undef, 'abc' ) {
+    foreach my $m (qw(searchLt searchGt)) {
+        $res = quiet { $class->$m( $args, '_utime', $bad ) };
+        is_deeply( $res, {},
+            "$m with value " . ( $bad // 'undef' ) . ': nothing returned' );
+    }
+}
+
+# Values that are not integers differ: SQL keeps only an integer prefix
+# (12.7 is 12, 1e3 is 1), Perl compares the numeric value
+$ids = reset_sessions(
+    dec => { _utime => '12.7', n => '12.7' },
+    exp => { _utime => '1e3',  n => '1e3' },
+);
+%rev = reverse %$ids;
+$res = $class->searchGt( $args, '_utime', 12 );
+is( join( ',', sort map { $rev{$_} } keys %$res ),
+    '', 'searchGt in SQL: integer prefix' );
+$res = $class->searchGt( $args, 'n', 12 );
+is( join( ',', sort map { $rev{$_} } keys %$res ),
+    'dec,exp', 'searchGt in Perl: numeric value' );
 
 done_testing();
 

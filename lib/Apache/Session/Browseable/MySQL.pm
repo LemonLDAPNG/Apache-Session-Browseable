@@ -163,6 +163,27 @@ Use it with Perl:
 Apache::Session::browseable provides some class methods to manipulate all
 sessions and add the capability to index some fields to make research faster.
 
+=head2 searchLt() and searchGt()
+
+  # Sessions whose _utime is lower than $time
+  my $hash = Apache::Session::Browseable::MySQL->searchLt( $args,
+      '_utime', $time, 'uid' );
+
+searchLt() and searchGt() take the same arguments and return the same data as
+searchOn(): sessions whose field is lower (or greater) than the given value,
+which is excluded. The value must be a number (C<12>, C<-12> or C<12.5>):
+otherwise nothing is returned and an error is printed on STDERR. Spaces
+around the value are ignored.
+
+Fields listed in C<Index> are compared in SQL as C<deleteIfLowerThan()> does
+(no cast), so the index of the column is used. Other fields are compared in
+Perl after reading all sessions.
+
+Sessions without the field are never returned. This differs from the Perl
+fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()
+would then return nearly all sessions. Lemonldap::NG doesn't need them: its
+sessions purge ignores sessions without C<_oidcRtUpdate>.
+
 =head1 SEE ALSO
 
 L<Apache::Session>

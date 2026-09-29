@@ -79,6 +79,8 @@ using "json" or "jsonb" type to be able to browse sessions and is able to dial
 directly with Patroni API to find the master node of PostgreSQL cluster in
 case of error.
 
+searchLt() and searchGt() work as in L<Apache::Session::Browseable::PgJSON>.
+
 =head2 Resilience features
 
 =over 4

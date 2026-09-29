@@ -103,6 +103,8 @@ sub run_tests {
             _session_kind => 'SSO',
             _utime        => 100,
             _lastSeen     => 100,
+            _oidcRtUpdate => 150,
+            counter       => 1,
             mail          => 'dwho@badwolf.org',
             ( map { ( $_ => 'w1' ) } @weird ),
         },
@@ -112,6 +114,8 @@ sub run_tests {
             _session_kind => 'Persistent',
             _utime        => 100,
             _lastSeen     => 300,
+            _oidcRtUpdate => 250,
+            counter       => 3,
             mail          => 'rtyler@badwolf.org',
             ( map { ( $_ => 'w2' ) } @weird ),
         },
@@ -121,14 +125,16 @@ sub run_tests {
             _session_kind => 'SSO',
             _utime        => 300,
             _lastSeen     => 100,
+            counter       => 2,
             mail          => 'obrien@badwolf.org',
         },
         nokind => {
-            uid          => 'nokind',
-            _whatToTrace => 'nokind',
-            _utime       => 100,
-            _lastSeen    => 100,
-            mail         => 'nokind@badwolf.org',
+            uid           => 'nokind',
+            _whatToTrace  => 'nokind',
+            _utime        => 100,
+            _lastSeen     => 100,
+            _oidcRtUpdate => 200,
+            mail          => 'nokind@badwolf.org',
         },
     );
 
@@ -249,6 +255,85 @@ sub run_tests {
             my $res = $class->searchOnExpr( $args, 'uid', "O'Br*" );
             is( $name->($res), 'obrien',
                 'searchOnExpr on a value containing a quote' );
+        }
+    );
+
+    # searchLt / searchGt: sessions without the field are never returned.
+    # "counter" is never indexed (Perl comparison with column backends)
+    $group->(
+        searchLt => sub {
+            foreach (
+                [ searchLt => _oidcRtUpdate => 200,     'dwho' ],
+                [ searchGt => _oidcRtUpdate => 200,     'rtyler' ],
+                [ searchLt => _oidcRtUpdate => 1000,    'dwho,nokind,rtyler' ],
+                [ searchGt => _oidcRtUpdate => -1,      'dwho,nokind,rtyler' ],
+                [ searchLt => _oidcRtUpdate => '200.5', 'dwho,nokind' ],
+                [ searchGt => _oidcRtUpdate => '199.5', 'nokind,rtyler' ],
+                [ searchLt => _utime        => 300,     'dwho,nokind,rtyler' ],
+                [ searchGt => _utime        => 100,     'obrien' ],
+                [ searchLt => counter       => 3,       'dwho,obrien' ],
+                [ searchGt => counter       => 1,       'obrien,rtyler' ],
+                [ searchGt => counter       => 0,       'dwho,obrien,rtyler' ],
+                [ searchLt => unknown       => 1000,    '' ],
+                [ searchGt => _oidcRtUpdate => ' 200 ', 'rtyler' ],
+                [ searchGt => counter       => ' 2 ',   'rtyler' ],
+              )
+            {
+                my ( $m, $f, $v, $expected ) = @$_;
+                my $res = $class->$m( $args, $f, $v );
+                is( $name->($res), $expected, "$m $f $v" );
+            }
+            $group->(
+                searchOnData => sub {
+                    my $res = $class->searchLt( $args, '_oidcRtUpdate', 200 );
+                    is( $res->{ $ids->{dwho} }->{mail},
+                        'dwho@badwolf.org',
+                        'searchLt without fields returns session data' );
+                    is( $res->{ $ids->{dwho} }->{_oidcRtUpdate},
+                        150, 'searchLt without fields returns field value' );
+                }
+            );
+            my $noId = sub {
+                my ($h) = @_;
+                return {
+                    map { $_ eq 'id' ? () : ( $_ => $h->{$_} ) }
+                      keys %$h
+                };
+            };
+            foreach (
+                [
+                    'searchLt', '_oidcRtUpdate',
+                    200,        'dwho',
+                    [qw(uid _oidcRtUpdate)]
+                ],
+                [
+                    'searchGt', '_utime',
+                    100,        'obrien',
+                    [qw(_whatToTrace _utime)]
+                ],
+                [ 'searchGt', 'counter', 2, 'rtyler', [qw(mail counter)] ],
+              )
+            {
+                my ( $m, $f, $v, $s, $fields ) = @$_;
+                my $res = $class->$m( $args, $f, $v, @$fields );
+                is( $name->($res), $s, "$m $f $v with fields" );
+                is_deeply(
+                    $noId->( $res->{ $ids->{$s} } || {} ),
+                    { map { ( $_ => $data{$s}->{$_} ) } @$fields },
+                    "$m $f $v with fields returns these fields"
+                );
+            }
+            foreach
+              my $bad ( '200 OR 1=1', '1e3', '', ' ', undef, "\x{0661}", '2 0' )
+            {
+                ( my $label = $bad // 'undef' ) =~ s/[^ -~]/?/g;
+                foreach my $m (qw(searchLt searchGt)) {
+                    my $res =
+                      $quiet->( sub { $class->$m( $args, '_utime', $bad ) } );
+                    is_deeply( $res, {},
+                        "$m with value '$label' returns nothing" );
+                }
+            }
         }
     );
 
@@ -387,6 +472,10 @@ sub run_tests {
                     my $res = eval { $class->searchOn( $args, $w, 'w1', $w ) };
                     is_deeply( $res, {},
                         "searchOn on field [$w]: no injection" )
+                      or diag $@;
+                    $res = eval { $class->searchLt( $args, $w, 1000 ) };
+                    is_deeply( $res, {},
+                        "searchLt on field [$w]: no injection" )
                       or diag $@;
                 }
             );

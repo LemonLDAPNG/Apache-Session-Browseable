@@ -43,6 +43,30 @@ sub searchOnExpr {
     return $class->_query( $args, $query, @fields );
 }
 
+sub searchLt {
+    my $class = shift;
+    return $class->_searchCompare( '<', @_ );
+}
+
+sub searchGt {
+    my $class = shift;
+    return $class->_searchCompare( '>', @_ );
+}
+
+# $value is checked, then inserted like deleteIfLowerThan() thresholds: bound,
+# it would be typed bigint and decimal values would fail
+sub _searchCompare {
+    my ( $class, $op, $args, $selectField, $value, @fields ) = @_;
+    $value =
+      Apache::Session::Browseable::_common->_checkSearchValue( $op, $value );
+    return {} unless ( defined $value );
+    my $query = {
+        query  => $class->_buildCompareExpression( $selectField, $op, $value ),
+        values => []
+    };
+    return $class->_query( $args, $query, @fields );
+}
+
 sub _query {
     my ( $class, $args, $query, @fields ) = @_;
     my %res = ();
@@ -270,6 +294,29 @@ sessions and add the capability to index some fields to make research faster.
 
 Apache::Session::Browseable::PgJSON implements it for PosqtgreSQL databases
 using "json" or "jsonb" type to be able to browse sessions.
+
+=head2 searchLt() and searchGt()
+
+  # Sessions whose _utime is lower than $time
+  my $hash = Apache::Session::Browseable::PgJSON->searchLt( $args,
+      '_utime', $time, 'uid' );
+
+searchLt() and searchGt() take the same arguments and return the same data as
+searchOn(): sessions whose field is lower (or greater) than the given value,
+which is excluded. The value must be a number (C<12>, C<-12> or C<12.5>):
+otherwise nothing is returned and an error is printed on STDERR. Spaces
+around the value are ignored.
+
+Fields are compared in SQL as deleteIfLowerThan() does
+(C<cast(a_session -E<gt>E<gt> 'field' AS bigint)>): an expression index
+declared exactly as C<u1> above is used with an integer value. As for
+deleteIfLowerThan(), the query fails if the field of a session is not an
+integer.
+
+Sessions without the field are never returned. This differs from the Perl
+fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()
+would then return nearly all sessions. Lemonldap::NG doesn't need them: its
+sessions purge ignores sessions without C<_oidcRtUpdate>.
 
 =head1 SEE ALSO
 

@@ -26,6 +26,20 @@ sub populate {
     return $self;
 }
 
+# CQL can't run the SQL comparisons of DBI.pm: read all sessions and compare
+# in Perl. As with other backends, sessions without the field are skipped
+sub searchLt {
+    my ( $class, $args, $selectField, $value, @fields ) = @_;
+    return $class->_searchByTest( $args, $selectField,
+        sub { defined( $_[0] ) and $_[0] < $value }, @fields );
+}
+
+sub searchGt {
+    my ( $class, $args, $selectField, $value, @fields ) = @_;
+    return $class->_searchByTest( $args, $selectField,
+        sub { defined( $_[0] ) and $_[0] > $value }, @fields );
+}
+
 1;
 
 =pod
@@ -96,6 +110,17 @@ Instead, you may pass in an already-opened DBI handle to your database.
  tie %hash, 'Apache::Session::Cassandra', $id, {
      Handle => $dbh
  };
+
+=head1 searchLt() AND searchGt()
+
+They take the same arguments and return the same data as searchOn(): sessions
+whose field is lower (or greater) than the given value, which is excluded.
+They read all sessions and compare fields in Perl: a non-numeric value is
+compared as 0, or as its numeric prefix.
+
+Sessions without the field are never returned, as with the other backends of
+this distribution. This differs from the Perl fallback of Lemonldap::NG,
+where a missing field is compared as 0.
 
 =head1 SEE ALSO
 

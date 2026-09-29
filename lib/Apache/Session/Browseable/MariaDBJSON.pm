@@ -287,6 +287,34 @@ works with DBD::MariaDB (C<dbi:MariaDB:...>) and DBD::mysql
 
 For MySQL, use L<Apache::Session::Browseable::MySQLJSON>.
 
+=head2 searchLt() and searchGt()
+
+  # Sessions whose _utime is lower than $time
+  my $hash = Apache::Session::Browseable::MariaDBJSON->searchLt( $args,
+      '_utime', $time, 'uid' );
+
+searchLt() and searchGt() take the same arguments and return the same data as
+searchOn(): sessions whose field is lower (or greater) than the given value,
+which is excluded. The value must be a number (C<12>, C<-12> or C<12.5>):
+otherwise nothing is returned and an error is printed on STDERR. Spaces
+around the value are ignored.
+
+Fields are compared in SQL as deleteIfLowerThan() does: fields listed in
+C<Index> on their (integer) generated column, which index is used, other
+fields with C<cast(JSON_VALUE(a_session, '$.field') as unsigned)>. Values are
+compared as unsigned integers: a non-numeric value is 0.
+
+Sessions without the field are never returned. This differs from the Perl
+fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()
+would then return nearly all sessions. Lemonldap::NG doesn't need them: its
+sessions purge ignores sessions without C<_oidcRtUpdate>. A field stored as
+JSON C<null> is skipped too (C<JSON_VALUE> returns C<NULL>).
+
+For fields not listed in C<Index>, a negative value becomes a huge number
+because of the unsigned cast (C<-5> is found by
+C<searchGt( $args, $field, 50 )>). Lemonldap::NG timestamps are positive
+integers.
+
 =head1 SEE ALSO
 
 L<Apache::Session>, L<Apache::Session::Browseable::MySQL>,

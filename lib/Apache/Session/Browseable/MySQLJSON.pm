@@ -60,6 +60,22 @@ sub searchOnExpr {
     return $class->_query( $args, $query, @fields );
 }
 
+# searchLt() and searchGt() are inherited from DBI.pm: any field can be
+# compared in SQL here
+sub _searchCompare {
+    my ( $class, $op, $args, $selectField, $value, @fields ) = @_;
+    $value = $class->_checkSearchValue( $op, $value );
+    return {} unless ( defined $value );
+    my $dbh   = $class->_classDbh($args);
+    my $query = {
+        query => $class->_buildCompareExpression(
+            $selectField, $op, $value, $dbh, $args
+        ),
+        values => []
+    };
+    return $class->_query( $args, $query, @fields );
+}
+
 sub _query {
     my ( $class, $args, $query, @fields ) = @_;
     my %res = ();
@@ -395,6 +411,34 @@ sessions and add the capability to index some fields to make research faster.
 
 Apache::Session::Browseable::MySQLJSON implements it for MySQL databases
 using "json" type to be able to browse sessions.
+
+=head2 searchLt() and searchGt()
+
+  # Sessions whose _utime is lower than $time
+  my $hash = Apache::Session::Browseable::MySQLJSON->searchLt( $args,
+      '_utime', $time, 'uid' );
+
+searchLt() and searchGt() take the same arguments and return the same data as
+searchOn(): sessions whose field is lower (or greater) than the given value,
+which is excluded. The value must be a number (C<12>, C<-12> or C<12.5>):
+otherwise nothing is returned and an error is printed on STDERR. Spaces
+around the value are ignored.
+
+Fields are compared in SQL as deleteIfLowerThan() does
+(C<cast(a_session-E<gt>E<gt>'$.field' as unsigned)>), so the index of a
+generated column declared as C<as_ut> above is used. Values are compared as
+unsigned integers: a non-numeric value is 0.
+
+Sessions without the field are never returned. This differs from the Perl
+fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()
+would then return nearly all sessions. Lemonldap::NG doesn't need them: its
+sessions purge ignores sessions without C<_oidcRtUpdate>.
+
+Because of the unsigned cast, two cases differ from a numeric comparison: a
+field stored as JSON C<null> is 0 (C<-E<gt>E<gt>> returns the string
+C<null>), so searchLt() returns it, and a negative value becomes a huge
+number (C<-5> is found by C<searchGt( $args, $field, 50 )>). Lemonldap::NG
+timestamps are positive integers.
 
 This module isn't usable with MariaDB: use
 L<Apache::Session::Browseable::MariaDBJSON> instead.

@@ -29,6 +29,48 @@ sub _fieldIsIndexed {
     return ( grep { $_ eq $field } @$index );
 }
 
+sub _isNumber {
+    my ( $class, $value ) = @_;
+    return ( defined($value) and $value =~ /^-?[0-9]+(?:\.[0-9]+)?\z/ );
+}
+
+# searchLt() and searchGt() values are also inserted into SQL queries. Return
+# the value without surrounding spaces (kept by the Lemonldap::NG CLI), or
+# undef if it isn't a number
+sub _checkSearchValue {
+    my ( $class, $op, $value ) = @_;
+    $value =~ s/^\s+|\s+\z//g if ( defined $value );
+    unless ( $class->_isNumber($value) ) {
+        print STDERR 'search'
+          . ( $op eq '<' ? 'Lt' : 'Gt' )
+          . ": value must be a number\n";
+        return undef;
+    }
+    return $value;
+}
+
+# Perl version of searchLt() and searchGt(): read all sessions and keep those
+# for which $test->( value of $selectField ) is true
+sub _searchByTest {
+    my ( $class, $args, $selectField, $test, @fields ) = @_;
+    my %res;
+    $class->get_key_from_all_sessions(
+        $args,
+        sub {
+            my ( $entry, $id ) = @_;
+            return undef unless ( $test->( $entry->{$selectField} ) );
+            if (@fields) {
+                $res{$id}->{$_} = $entry->{$_} foreach (@fields);
+            }
+            else {
+                $res{$id} = $entry;
+            }
+            undef;
+        }
+    );
+    return \%res;
+}
+
 # Get the unserialize sub of a class (populate() may be inherited)
 sub _unserializer {
     my ($class) = @_;
@@ -78,7 +120,7 @@ sub _checkThresholds {
     my $thresholds = $rule->{or} || $rule->{and};
     return 1 unless ( ref($thresholds) eq 'HASH' );
     foreach ( values %$thresholds ) {
-        unless ( defined($_) and /^-?[0-9]+(?:\.[0-9]+)?\z/ ) {
+        unless ( $class->_isNumber($_) ) {
             print STDERR "deleteIfLowerThan: threshold must be a number\n";
             return 0;
         }

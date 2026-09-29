@@ -60,6 +60,37 @@ sub searchOnExpr {
     return $res;
 }
 
+# PostgreSQL folds unquoted column names to lower case: restore the case of
+# requested fields in the result set
+sub _restoreCase {
+    my ( $res, @fields ) = @_;
+    foreach my $f (@fields) {
+        next if ref($f) or $f eq lc($f);
+        my $lc = lc $f;
+        foreach my $s ( keys %$res ) {
+            my $h = $res->{$s};
+            next unless ref($h) eq 'HASH';
+            $h->{$f} = delete $h->{$lc}
+              if exists $h->{$lc} and not exists $h->{$f};
+        }
+    }
+    return $res;
+}
+
+sub searchLt {
+    my $class = shift;
+    my ( $args, $selectField, $value, @fields ) = @_;
+    my $res = $class->SUPER::searchLt(@_);
+    return _restoreCase( $res, @fields );
+}
+
+sub searchGt {
+    my $class = shift;
+    my ( $args, $selectField, $value, @fields ) = @_;
+    my $res = $class->SUPER::searchGt(@_);
+    return _restoreCase( $res, @fields );
+}
+
 # Cast to bigint instead of integer: PostgreSQL drops this cast on a bigint
 # column, so its index can be used
 sub _buildCompareExpression {
@@ -178,6 +209,27 @@ Apache::Session::Browseable provides some class methods to manipulate all
 sessions and add the capability to index some fields to make research faster.
 
 Apache::Session::Browseable::Postgres implements it for PosqtgreSQL databases.
+
+=head2 searchLt() and searchGt()
+
+  # Sessions whose _utime is lower than $time
+  my $hash = Apache::Session::Browseable::Postgres->searchLt( $args,
+      '_utime', $time, 'uid' );
+
+searchLt() and searchGt() take the same arguments and return the same data as
+searchOn(): sessions whose field is lower (or greater) than the given value,
+which is excluded. The value must be a number (C<12>, C<-12> or C<12.5>):
+otherwise nothing is returned and an error is printed on STDERR. Spaces
+around the value are ignored.
+
+Fields listed in C<Index> are compared in SQL as C<deleteIfLowerThan()> does
+(C<cast(field as bigint)>), so the index of the column is used with an
+integer value. Other fields are compared in Perl after reading all sessions.
+
+Sessions without the field are never returned. This differs from the Perl
+fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()
+would then return nearly all sessions. Lemonldap::NG doesn't need them: its
+sessions purge ignores sessions without C<_oidcRtUpdate>.
 
 =head1 SEE ALSO
 
