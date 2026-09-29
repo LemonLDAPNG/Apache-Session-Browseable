@@ -70,7 +70,7 @@ sub _query {
     $args->{ldapAttributeContent} ||= 'description';
     $args->{ldapAttributeIndex}   ||= 'ou';
 
-    my $obj  = Apache::Session::Browseable::Store::LDAP->fromArgs($args);
+    my $obj  = Apache::Session::Browseable::Store::LDAP->new($args);
     my $ldap = $obj->ldap();
     my $msg  = $ldap->search(
         base   => $args->{ldapConfBase},
@@ -115,7 +115,7 @@ sub get_key_from_all_sessions {
     $args->{ldapAttributeIndex}   ||= 'ou';
 
     my %res  = ();
-    my $obj  = Apache::Session::Browseable::Store::LDAP->fromArgs($args);
+    my $obj  = Apache::Session::Browseable::Store::LDAP->new($args);
     my $ldap = $obj->ldap();
     my $msg  = $ldap->search(
         base => $args->{ldapConfBase},

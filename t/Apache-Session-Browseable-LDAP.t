@@ -5,22 +5,27 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 33;
+plan tests => 35;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
 use_ok($package);
 ok( !$INC{'IO/Socket/Timeout.pm'}, 'IO::Socket::Timeout not loaded' );
 
-# fromArgs
+# new
 my $args  = { ldapServer => 'ldap://localhost' };
-my $store = $package->fromArgs($args);
+my $store = $package->new($args);
 isa_ok( $store, $package );
-is( $store->{args}, $args, 'fromArgs keeps args' );
+is( $store->{args}, $args, 'new keeps args' );
+
+# new called by Apache::Session with a blessed session object
+my $obj = $package->new( bless { args => $args }, 'Some::Session' );
+isa_ok( $obj, $package );
+ok( !exists $obj->{args}, 'new ignores blessed object' );
 
 # _parseServers
 sub parse {
-    return $package->fromArgs( { ldapServer => shift, @_ } )->_parseServers;
+    return $package->new( { ldapServer => shift, @_ } )->_parseServers;
 }
 
 my @s = parse('ldap://localhost');
@@ -92,7 +97,7 @@ is_deeply(
 sub bindArgs {
     my ( $ssl, $tls, %args ) = @_;
     my $ldap = MockLDAP->new($ssl);
-    $package->fromArgs( \%args )->_bind( $ldap, $tls );
+    $package->new( \%args )->_bind( $ldap, $tls );
     return $ldap->{args};
 }
 
