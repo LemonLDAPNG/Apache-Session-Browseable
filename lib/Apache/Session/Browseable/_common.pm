@@ -5,6 +5,9 @@ use AutoLoader 'AUTOLOAD';
 
 our $VERSION = '1.2.2';
 
+# Number of sessions read per query by _forEachSession()
+our $BatchSize = 1000;
+
 sub _tabInTab {
     my ( $class, $t1, $t2 ) = @_;
 
@@ -49,6 +52,34 @@ sub _unserializer {
     my ($class) = @_;
     no strict 'refs';
     return &{"${class}::populate"}()->{unserialize};
+}
+
+# Call $sub->( $id, $serialized ) for each session. If the driver supports
+# LIMIT, sessions are read by batches to avoid loading the whole table in
+# memory. No server-side cursor here: $sub may reuse the database handle.
+sub _forEachSession {
+    my ( $class, $dbh, $table_name, $sub ) = @_;
+    my $sql = "SELECT id,a_session FROM $table_name";
+    unless ( $dbh->{Driver}->{Name} =~ /^(?:Pg|mysql|MariaDB|SQLite)\z/ ) {
+        my $sth = $dbh->prepare_cached($sql);
+        $sth->execute;
+        while ( my @row = $sth->fetchrow_array ) {
+            $sub->(@row);
+        }
+        return;
+    }
+    my ( $last, $rows );
+    do {
+        my $sth =
+          $dbh->prepare_cached( $sql
+              . ( defined($last) ? ' WHERE id > ?' : '' )
+              . " ORDER BY id LIMIT $BatchSize" );
+        $sth->execute( defined($last) ? ($last) : () );
+        $rows = $sth->fetchall_arrayref;
+        $sub->(@$_) foreach (@$rows);
+        $last = $rows->[-1]->[0] if (@$rows);
+    } while ( @$rows >= $BatchSize );
+    return;
 }
 
 1;

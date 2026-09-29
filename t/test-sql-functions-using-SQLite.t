@@ -257,6 +257,36 @@ quiet {
 };
 is_deeply( $qargs->{Index}, [ 'uid', "a'b" ], 'Store: Index not modified' );
 
+# 10. get_key_from_all_sessions reads sessions by batches
+{
+    no warnings 'once';
+    local $Apache::Session::Browseable::_common::BatchSize = 2;
+    my $queries = 0;
+    my $cdbh    = $class->_classDbh($args);
+    local $cdbh->{Callbacks} =
+      { ChildCallbacks => { execute => sub { $queries++; return } } };
+    foreach my $n ( 4, 5 ) {
+        $ids = reset_sessions( map { ( "s$_" => { uid => "u$_" } ) } 1 .. $n );
+        $queries = 0;
+        my $calls = 0;
+        $res = $class->get_key_from_all_sessions( $args,
+            sub { $calls++; $_[0]->{uid} } );
+        is( $calls, $n, "$n sessions by batches: callback called for each" );
+        is_deeply(
+            $res,
+            { map { ( $ids->{"s$_"} => "u$_" ) } 1 .. $n },
+            "$n sessions by batches: all sessions returned"
+        );
+        is( $queries, 3, "$n sessions by batches: 3 queries" );
+        $res = $class->get_key_from_all_sessions($args);
+        is(
+            join( ',', sort map { $_->{uid} } values %$res ),
+            join( ',', map { "u$_" } 1 .. $n ),
+            "$n sessions by batches: all sessions returned without callback"
+        );
+    }
+}
+
 done_testing();
 
 END {

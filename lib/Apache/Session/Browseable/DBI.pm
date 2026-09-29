@@ -176,8 +176,6 @@ sub get_key_from_all_sessions {
             return $sth->fetchall_hashref('id');
         }
     }
-    my $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
-    $sth->execute;
     my %res;
     my $next = (
         $args->{DataSource} =~ /^sybase/i
@@ -193,26 +191,31 @@ sub get_key_from_all_sessions {
         : undef
     );
     my $sub = $class->_unserializer;
-    while ( my @row = $sth->fetchrow_array ) {
-        eval {
-            my $tmp = &$sub( { serialized => $row[1] }, $next );
-            if ( ref($data) eq 'CODE' ) {
-                $tmp = &$data( $tmp, $row[0] );
-                $res{ $row[0] } = $tmp if ( defined($tmp) );
+    $class->_forEachSession(
+        $dbh,
+        $table_name,
+        sub {
+            my @row = @_;
+            eval {
+                my $tmp = &$sub( { serialized => $row[1] }, $next );
+                if ( ref($data) eq 'CODE' ) {
+                    $tmp = &$data( $tmp, $row[0] );
+                    $res{ $row[0] } = $tmp if ( defined($tmp) );
+                }
+                elsif ($data) {
+                    $data = [$data] unless ( ref($data) );
+                    $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
+                }
+                else {
+                    $res{ $row[0] } = $tmp;
+                }
+            };
+            if ($@) {
+                print STDERR "Error in session $row[0]: $@\n";
+                delete $res{ $row[0] };
             }
-            elsif ($data) {
-                $data = [$data] unless ( ref($data) );
-                $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
-            }
-            else {
-                $res{ $row[0] } = $tmp;
-            }
-        };
-        if ($@) {
-            print STDERR "Error in session $row[0]: $@\n";
-            delete $res{ $row[0] };
         }
-    }
+    );
     return \%res;
 }
 
