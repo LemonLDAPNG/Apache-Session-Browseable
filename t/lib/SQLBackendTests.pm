@@ -13,9 +13,6 @@ package SQLBackendTests;
 #  - null:    1 if a field can be stored as JSON null (JSON backends)
 #  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - corrupt: a_session value that can't be unserialized
-#
-# ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
-# of table names.
 
 use strict;
 use warnings;
