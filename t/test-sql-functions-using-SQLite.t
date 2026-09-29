@@ -287,6 +287,27 @@ is_deeply( $qargs->{Index}, [ 'uid', "a'b" ], 'Store: Index not modified' );
     }
 }
 
+# 11. Invalid batch sizes fall back to the default one
+{
+    no warnings 'once';
+    $ids = reset_sessions( map { ( "s$_" => { uid => "u$_" } ) } 1 .. 3 );
+    foreach my $size ( 0, -1, 'abc', undef ) {
+        local $Apache::Session::Browseable::_common::BatchSize = $size;
+        my $name = defined $size ? "'$size'" : 'undef';
+        $res = eval {
+            local $SIG{ALRM} = sub { die "timeout\n" };
+            alarm 10;
+            my $r = $class->get_key_from_all_sessions($args);
+            alarm 0;
+            $r;
+        };
+        alarm 0;
+        is( $@, '', "BatchSize $name: terminates" );
+        is( join( ',', sort map { $_->{uid} } values %{ $res || {} } ),
+            'u1,u2,u3', "BatchSize $name: all sessions returned" );
+    }
+}
+
 done_testing();
 
 END {
