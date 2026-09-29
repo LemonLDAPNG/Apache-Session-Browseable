@@ -20,8 +20,8 @@ sub populate {
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
     $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
-    $self->{serialize}    = \&Apache::Session::Serialize::JSONserialize;
-    $self->{unserialize}  = \&Apache::Session::Serialize::JSONunserialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serialize;
+    $self->{unserialize}  = \&Apache::Session::Serialize::JSON::unserialize;
 
     return $self;
 }
