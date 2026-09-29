@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 33;
+plan tests => 61;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -121,3 +121,42 @@ $r = bindArgs( 0, {}, ldapBindDN => '' );
 is_deeply( $r, [], 'empty DN: anonymous' );
 
 ok( !$INC{'IO/Socket/Timeout.pm'}, 'IO::Socket::Timeout still not loaded' );
+
+# Browseable::LDAP helpers (no server needed)
+my $browseable = 'Apache::Session::Browseable::LDAP';
+use_ok($browseable);
+
+# _cmpNum: exact comparison of decimal strings
+foreach (
+    [ 1,                  2,                  -1 ],
+    [ 10,                 9,                   1 ],
+    [ 99,                 1000,               -1 ],
+    [ '0010',             10,                  0 ],
+    [ '7.000',            7,                   0 ],
+    [ '-0',               '0.0',               0 ],
+    [ -1,                  0,                 -1 ],
+    [ -10,                -9,                 -1 ],
+    [ '0.5',              '0.45',              1 ],
+    [ '-0.5',             '-0.45',            -1 ],
+    [ '999.5',            1000,               -1 ],
+    [ 1790000000,         1790000001,         -1 ],
+    [ '9007199254740993', '9007199254740992',  1 ],
+    [ " 12\n",            ' 12 ',              0 ],
+  )
+{
+    is( $browseable->_cmpNum( $_->[0], $_->[1] ),
+        $_->[2], "_cmpNum($_->[0], $_->[1])" );
+}
+foreach ( 'abc', '', ' ', undef, '1e3', '1 2', '1.', '.5', '+1', '0x10', [1] ) {
+    my $d = defined $_ ? "'$_'" : 'undef';
+    ok( !defined $browseable->_cmpNum( $_, 1 ), "_cmpNum: $d isn't a number" );
+}
+
+# _presenceFilter escapes the field name
+is( $browseable->_presenceFilter( { ldapAttributeIndex => 'ou' }, '_utime' ),
+    '(ou=_utime_*)', '_presenceFilter' );
+is(
+    $browseable->_presenceFilter( { ldapAttributeIndex => 'ou' }, 'a*b(c)\\' ),
+    '(ou=a\2ab\28c\29\5c_*)',
+    '_presenceFilter: escaped field'
+);
