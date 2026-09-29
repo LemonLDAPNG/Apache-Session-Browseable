@@ -59,7 +59,12 @@ sub _searchCompare {
     my ( $class, $op, $args, $selectField, $value, @fields ) = @_;
     $value = $class->_checkSearchValue( $op, $value );
     return {} unless ( defined $value );
-    unless ( $class->_fieldIsIndexed( $args, $selectField ) ) {
+
+    # Escape quotes as in searchOn(): _fieldIsIndexed() and the query must
+    # test the same name
+    my $field = $selectField;
+    $field =~ s/'/''/g;
+    unless ( $class->_fieldIsIndexed( $args, $field ) ) {
         return $class->_searchByTest(
             $args,
             $selectField,
@@ -70,8 +75,8 @@ sub _searchCompare {
             @fields
         );
     }
-    my $query = $class->_buildCompareExpression( $selectField, $op, $value );
-    return $class->_query( $args, $selectField, $value,
+    my $query = $class->_buildCompareExpression( $field, $op, $value );
+    return $class->_query( $args, $field, $value,
         { query => $query, values => [] }, @fields );
 }
 

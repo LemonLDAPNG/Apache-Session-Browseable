@@ -292,6 +292,31 @@ $res = $class->searchGt( $args, 'n', 12 );
 is( join( ',', sort map { $rev{$_} } keys %$res ),
     'dec,exp', 'searchGt in Perl: numeric value' );
 
+# 14. A field name containing a quote is escaped as in searchOn(): it is no
+# longer found in Index and is compared in Perl, never interpolated in SQL
+$ids = reset_sessions(
+    a => { uid => 'a', "a'b" => 100 },
+    b => { uid => 'b', "a'b" => 300 },
+);
+my $quoteArgs = { %$args, Index => [ 'uid', "a'b" ] };
+{
+    my @sql;
+    my $cdbh = $class->_classDbh($quoteArgs);
+    local $cdbh->{Callbacks} = {
+        prepare => sub { push @sql, $_[1]; return }
+    };
+    foreach ( [ searchLt => 200, 'a' ], [ searchGt => 200, 'b' ] ) {
+        my ( $m, $v, $expected ) = @$_;
+        @sql = ();
+        $res = eval { $class->$m( $quoteArgs, "a'b", $v ) };
+        is( $@, '', "$m with a quoted field name: no error" );
+        is( join( ',', sort map { $_->{uid} } values %{ $res || {} } ),
+            $expected, "$m with a quoted field name" );
+        unlike( join( "\n", @sql ),
+            qr/a'b/, "$m with a quoted field name: not interpolated in SQL" );
+    }
+}
+
 done_testing();
 
 END {
