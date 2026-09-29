@@ -3,21 +3,31 @@ package SQLBackendTests;
 # Common tests for SQL backends, run only if <env>_DSN is set (credentials
 # are read from <env>_USER and <env>_PASSWORD). Parameters:
 #  - class:   Apache::Session::Browseable class to test
-#  - driver:  DBD driver name (Pg, mysql)
-#  - env:     environment variables prefix (PG, MYSQL)
+#  - driver:  DBD driver name (Pg, mysql, MariaDB); if not set, it is read
+#             from <env>_DSN
+#  - env:     environment variables prefix (PG, MYSQL, MARIADB)
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
-#  - index:   indexed fields (DBI based backends, one column per field)
+#  - index:   indexed fields (one column per field)
 #  - json:    1 if any field can be queried (JSON/Hstore backends)
 #  - weird:   field names that need quoting (JSON/Hstore backends)
 #  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
+#  - utf8:    1 to test non-ASCII field names and values (JSON backends)
 #  - exact:   1 to check that searches are case and accent sensitive
-#  - explain: sub( $class, $dbh ) returning a list of
-#             [ description, WHERE clause, index or array ref of indexes ]:
-#             the plan of each WHERE clause must use all these indexes
+#  - explain: sub( $class, $dbh, $args ) returning a list of
+#             [ description, WHERE clause, index or array ref of indexes,
+#               statement ]:
+#             the plan of each WHERE clause must use all these indexes.
+#             Statement defaults to "SELECT id" (use "DELETE" to explain a
+#             deletion)
+#  - explain_key:  1 to check that MySQL/MariaDB chooses these indexes, not
+#                  only lists them in possible_keys
+#  - explain_fill: number of sessions to add to a new table before explaining
+#                  queries, so that the optimizer choices don't depend on a
+#                  tiny table
 #
 # ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
 # of table names.
@@ -37,6 +47,8 @@ sub run_tests {
     $table =~ s/^asb_test_/$ENV{ASB_TEST_TABLE_PREFIX}/
       if $ENV{ASB_TEST_TABLE_PREFIX};
 
+    $o{driver} ||= ( ( $dsn // '' ) =~ /^dbi:(\w+):/i )[0];
+    plan skip_all => "Set $o{env}_DSN to run this test" unless $o{driver};
     plan skip_all => "DBD::$o{driver} is needed for this test"
       unless eval "require DBI; require DBD::$o{driver}; 1";
     plan skip_all => "Set $o{env}_DSN to run this test" unless $dsn;
@@ -46,11 +58,14 @@ sub run_tests {
         $ENV{"$o{env}_PASSWORD"},
         { RaiseError => 1, PrintError => 0, PrintWarn => 0, AutoCommit => 1 }
     );
-    $dbh->do("DROP TABLE IF EXISTS $table");
-    foreach ( @{ $o{create} } ) {
-        ( my $sql = $_ ) =~ s/__TABLE__/$table/g;
-        $dbh->do($sql);
-    }
+    my $create = sub {
+        $dbh->do("DROP TABLE IF EXISTS $table");
+        foreach ( @{ $o{create} } ) {
+            ( my $sql = $_ ) =~ s/__TABLE__/$table/g;
+            $dbh->do($sql);
+        }
+    };
+    $create->();
 
     use_ok($class);
 
@@ -379,6 +394,120 @@ sub run_tests {
                 }
             );
         }
+
+        # Field names are case sensitive (MySQL/MariaDB column names aren't)
+        $group->(
+            fieldCase => sub {
+                my $res = $class->searchOn( $args, '_WhatToTrace', 'dwho' );
+                is_deeply( $res, {},
+                    'searchOn: field names are case sensitive' );
+                $res = $class->searchOnExpr( $args, '_WhatToTrace', 'dw*' );
+                is_deeply( $res, {},
+                    'searchOnExpr: field names are case sensitive' );
+            }
+        );
+        $group->(
+            gkfasArray => sub {
+                my $res =
+                  $class->get_key_from_all_sessions( $args, ['_WhatToTrace'] );
+                is_deeply(
+                    $res->{ $ids->{dwho} },
+                    { id => $ids->{dwho}, _WhatToTrace => undef },
+                    'get_key_from_all_sessions: field names are case sensitive'
+                );
+            }
+        );
+    }
+
+    # Non-ASCII field names and values
+    if ( $o{utf8} ) {
+        my $uid = $newSession->(
+            %{ $data{dwho} },
+            uid          => "\x{c9}lodie",
+            _whatToTrace => "\x{c9}lodie",
+            cn           => "Zo\x{eb} \x{20ac}",
+            "cl\x{e9}"   => 'v',
+        );
+        $group->(
+            utf8 => sub {
+                my $res =
+                  $class->searchOn( $args, '_whatToTrace', "\x{c9}lodie",
+                    'cn' );
+                is_deeply(
+                    $res,
+                    { $uid => { id => $uid, cn => "Zo\x{eb} \x{20ac}" } },
+                    'searchOn with non-ASCII value'
+                );
+                $res = $class->searchOn( $args, 'cn', "Zo\x{eb} \x{20ac}",
+                    '_whatToTrace', "cl\x{e9}" );
+                is_deeply(
+                    $res,
+                    {
+                        $uid => {
+                            id           => $uid,
+                            _whatToTrace => "\x{c9}lodie",
+                            "cl\x{e9}"   => 'v'
+                        }
+                    },
+                    'searchOn with non-ASCII field name and value'
+                );
+            }
+        );
+        $group->(
+            gkfasArray => sub {
+                my $res = $class->get_key_from_all_sessions( $args,
+                    [ 'cn', "cl\x{e9}" ] );
+                is_deeply(
+                    $res->{$uid},
+                    {
+                        id         => $uid,
+                        cn         => "Zo\x{eb} \x{20ac}",
+                        "cl\x{e9}" => 'v'
+                    },
+                    'get_key_from_all_sessions with non-ASCII field name'
+                );
+            }
+        );
+        $group->(
+            utf8Read => sub {
+                my $res = $class->get_key_from_all_sessions($args);
+                is(
+                    $res->{$uid}->{cn},
+                    "Zo\x{eb} \x{20ac}",
+                    'get_key_from_all_sessions returns non-ASCII value'
+                );
+            }
+        );
+        $group->(
+            deleteNot => sub {
+                foreach (
+                    [ value        => { _whatToTrace => "\x{c9}lodie" } ],
+                    [ 'field name' => { "cl\x{e9}"   => 'v' } ]
+                  )
+                {
+                    my ( $l, $not ) = @$_;
+                    my @r = $class->deleteIfLowerThan( $args,
+                        { or => { _utime => 200 }, not => $not } );
+                    is_deeply(
+                        \@r,
+                        [ 1, 3 ],
+                        "deleteIfLowerThan \"not\" non-ASCII $l"
+                    );
+                    is(
+                        $remaining->(),
+                        join( ',', sort 'obrien', $uid ),
+"deleteIfLowerThan \"not\" non-ASCII $l: right sessions kept"
+                    );
+                    $reset->();
+                    $uid = $newSession->(
+                        %{ $data{dwho} },
+                        _whatToTrace => "\x{c9}lodie",
+                        "cl\x{e9}"   => 'v',
+                    );
+                }
+            }
+        );
+        $reset->();
     }
 
     # deleteIfLowerThan
@@ -482,20 +611,37 @@ sub run_tests {
 
     # Queries must be able to use indexes
     if ( $o{explain} ) {
+
+        # New table: rows deleted by previous tests may still be in indexes
+        # and distort the optimizer estimates
+        $create->() if ( $o{explain_fill} );
         $reset->();
+        if ( $o{explain_fill} ) {
+            $newSession->(
+                uid           => "filler$_",
+                _whatToTrace  => "filler$_",
+                _session_kind => 'SSO',
+                _utime        => 1000 + $_,
+                _lastSeen     => 1000 + $_,
+            ) foreach ( 1 .. $o{explain_fill} );
+            $dbh->selectall_arrayref(
+                ( $o{driver} eq 'Pg' ? 'ANALYZE' : 'ANALYZE TABLE' )
+                . " $table" );
+        }
         $dbh->do('SET enable_seqscan = off') if ( $o{driver} eq 'Pg' );
 
         # MySQL >= 8.3: JSON and TREE formats have no possible_keys column
         eval { $dbh->do('SET SESSION explain_format=TRADITIONAL') }
           if ( $o{driver} eq 'mysql' );
-        foreach ( $o{explain}->( $class, $dbh ) ) {
-            my ( $desc, $where, $indexes ) = @$_;
+        foreach ( $o{explain}->( $class, $dbh, $args ) ) {
+            my ( $desc, $where, $indexes, $statement ) = @$_;
             my @indexes =
               map { ( my $i = $_ ) =~ s/__TABLE__/$table/g; $i }
               ref($indexes) ? @$indexes : ($indexes);
             my $index = join ',', @indexes;
+            $statement ||= 'SELECT id';
             my $sth =
-              $dbh->prepare("EXPLAIN SELECT id FROM $table WHERE $where");
+              $dbh->prepare("EXPLAIN $statement FROM $table WHERE $where");
             $sth->execute;
             if ( $o{driver} eq 'Pg' ) {
                 my $plan = join "\n",
@@ -512,6 +658,13 @@ sub run_tests {
                 my @missing = grep { !$keys{$_} } @indexes;
                 ok( !@missing, "$desc can use index $index" )
                   or diag "$where: possible_keys=$keys";
+                if ( $o{explain_key} ) {
+                    is_deeply(
+                        [ sort split /,/, $row->{key} // '' ],
+                        [ sort @indexes ],
+                        "$desc uses index $index"
+                    ) or diag "$where: type=" . ( $row->{type} // '' );
+                }
                 $sth->finish;
             }
         }

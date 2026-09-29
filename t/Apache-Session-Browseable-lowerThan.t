@@ -16,8 +16,10 @@ use Test::More;
 }
 my $dbh = FakeDbh->new;
 
-# The database handle is optional: MySQLJSON needs it to quote the JSON path,
-# but the DBI deleteIfLowerThan() path doesn't provide one
+# The database handle is optional: MySQLJSON and MariaDBJSON need it to quote
+# the JSON path, but the DBI deleteIfLowerThan() path doesn't provide one.
+# Connection arguments (Index) are only used by MariaDBJSON
+my $index = { Index => '_utime _lastSeen' };
 my @tests = (
     [ 'Postgres', '_utime', 'cast(_utime as bigint) < 200' ],
     [ 'MySQL',    '_utime', '_utime < 200' ],
@@ -40,15 +42,21 @@ my @tests = (
         'MySQLJSON', '_lastSeen',
         q{cast(a_session->>'$._lastSeen' as UNSIGNED) < 200}
     ],
+    [
+        'MariaDBJSON', '_utime',
+        q{cast(JSON_VALUE(a_session, '$._utime') as UNSIGNED) < 200}
+    ],
+    [ 'MariaDBJSON', '_utime',    '`_utime` < 200',    $index ],
+    [ 'MariaDBJSON', '_lastSeen', '`_lastSeen` < 200', $index ],
 );
 
 foreach (@tests) {
-    my ( $backend, $field, $expected ) = @$_;
+    my ( $backend, $field, $expected, $args ) = @$_;
     my $class = "Apache::Session::Browseable::$backend";
   SKIP: {
         skip "$class can't be loaded", 1 unless ( eval "require $class" );
-        is( $class->_buildLowerThanExpression( $field, 200, $dbh ),
-            $expected, "$backend: $field" );
+        is( $class->_buildLowerThanExpression( $field, 200, $dbh, $args ),
+            $expected, "$backend: $field" . ( $args ? ' (indexed)' : '' ) );
     }
 }
 

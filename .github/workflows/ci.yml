@@ -45,10 +45,34 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: sessions
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      mariadb1011:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: sessions
+        ports:
+          - 3308:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - name: Install Perl dependencies
-        run: sudo apt-get update && sudo apt-get install -y libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl libdbd-pg-perl liblwp-protocol-psgi-perl
+        run: sudo apt-get update && sudo apt-get install -y libmodule-build-perl libapache-session-perl libjson-perl libdbi-perl libdbd-sqlite3-perl libnet-ldap-perl libredis-perl libdbd-mysql-perl libdbd-mariadb-perl libdbd-pg-perl liblwp-protocol-psgi-perl
       - name: Build and run tests
         env:
           REDIS_URL: localhost:6379
@@ -58,7 +82,18 @@ jobs:
           MYSQL_DSN: dbi:mysql:database=sessions;host=127.0.0.1;port=3306
           MYSQL_USER: root
           MYSQL_PASSWORD: root
+          MARIADB_DSN: dbi:MariaDB:database=sessions;host=127.0.0.1;port=3307
+          MARIADB_USER: root
+          MARIADB_PASSWORD: root
         run: |
           perl Build.PL
           ./Build
           ./Build test
+      - name: Run MariaDB tests with other MariaDB versions/drivers
+        env:
+          MARIADB_USER: root
+          MARIADB_PASSWORD: root
+        run: |
+          MARIADB_DSN='dbi:MariaDB:database=sessions;host=127.0.0.1;port=3308' prove -b t/Apache-Session-Browseable-MariaDBJSON.t
+          MARIADB_DSN='dbi:mysql:database=sessions;host=127.0.0.1;port=3308' prove -b t/Apache-Session-Browseable-MariaDBJSON.t
+          MARIADB_DSN='dbi:mysql:database=sessions;host=127.0.0.1;port=3307' prove -b t/Apache-Session-Browseable-MariaDBJSON.t
