@@ -10,6 +10,7 @@ package SQLBackendTests;
 #  - index:   indexed fields (DBI based backends, one column per field)
 #  - json:    1 if any field can be queried (JSON/Hstore backends)
 #  - weird:   field names that need quoting (JSON/Hstore backends)
+#  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - corrupt: a_session value that can't be unserialized
 
 use strict;
@@ -307,6 +308,59 @@ sub run_tests {
             { or => { _utime => 400 }, not => { $w => 'w1' } } );
         is_deeply( \@r, [ 1, 3 ], "deleteIfLowerThan \"not\" on field [$w]" );
         is( $remaining->(), 'dwho', "deleteIfLowerThan \"not\" on field [$w]" );
+    }
+
+    # PostgreSQL with standard_conforming_strings=off: backslashes are escape
+    # characters in plain string literals
+    if ( $o{scs} ) {
+        my $mdbh = $class->_classDbh($args);
+        $mdbh->do('SET standard_conforming_strings = off');
+        is( $mdbh->selectrow_array('SHOW standard_conforming_strings'),
+            'off', 'standard_conforming_strings is off for the module' );
+        my %isWeird = map { $_ => 1 } @weird;
+        my @names = ( @weird, grep { !$isWeird{$_} } "x\\' OR '1'='1", 'x\\' );
+        foreach my $w (@names) {
+            my $found = $isWeird{$w};
+            my $l     = "field [$w] (scs off)";
+            $reset->();
+            $res = eval { $class->searchOn( $args, $w, 'w1', 'uid' ) };
+            diag $@ if $@;
+            is( $name->( $res || {} ), $found ? 'dwho' : '', "searchOn on $l" );
+            $res = eval { $class->searchOnExpr( $args, $w, 'w*', 'uid' ) };
+            diag $@ if $@;
+            is(
+                $name->( $res || {} ),
+                $found ? 'dwho,rtyler' : '',
+                "searchOnExpr on $l"
+            );
+            $res = eval { $class->get_key_from_all_sessions( $args, [$w] ) };
+            diag $@ if $@;
+            is( scalar( keys %{ $res || {} } ),
+                4, "get_key_from_all_sessions on $l" );
+            is(
+                ( $res || {} )->{ $ids->{rtyler} }->{$w},
+                $found ? 'w2' : undef,
+                "get_key_from_all_sessions returns the right value on $l"
+            );
+            @r = eval {
+                $class->deleteIfLowerThan( $args,
+                    { or => { _utime => 200 }, not => { $w => 'w1' } } );
+            };
+            diag $@ if $@;
+            is_deeply(
+                \@r,
+                [ 1, $found ? 2 : 3 ],
+                "deleteIfLowerThan \"not\" on $l"
+            );
+            is(
+                $remaining->(),
+                $found ? 'dwho,obrien' : 'obrien',
+                "deleteIfLowerThan \"not\" on $l: right sessions kept"
+            );
+        }
+        $mdbh->do('SET standard_conforming_strings = on');
+        is( $mdbh->selectrow_array('SHOW standard_conforming_strings'),
+            'on', 'standard_conforming_strings is back on' );
     }
 
     # Corrupted session must not break listing
