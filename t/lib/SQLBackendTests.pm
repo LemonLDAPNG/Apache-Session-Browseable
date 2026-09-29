@@ -358,7 +358,7 @@ sub run_tests {
     $reset->();
     @r =
       eval { $class->deleteIfLowerThan( $args, { not => { uid => 'dwho' } } ); };
-    is_deeply( \@r, [0], 'deleteIfLowerThan with only "not" returns 0' )
+    is_deeply( \@r, [ 0, 0 ], 'deleteIfLowerThan with only "not" returns 0' )
       or diag $@;
     foreach my $bad ( '200 OR 1=1', '1e3', '' ) {
         @r = $quiet->(
@@ -369,7 +369,7 @@ sub run_tests {
                 };
             }
         );
-        is_deeply( \@r, [0],
+        is_deeply( \@r, [ 0, 0 ],
             "deleteIfLowerThan with threshold '$bad' returns 0" );
     }
     is( $remaining->(), 'dwho,nokind,obrien,rtyler', 'Nothing deleted' );
@@ -383,7 +383,7 @@ sub run_tests {
                 };
             }
         );
-        is_deeply( \@r, [0],
+        is_deeply( \@r, [ 0, 0 ],
             "deleteIfLowerThan \"and\" with threshold '$label' returns 0" );
     }
     is( $remaining->(), 'dwho,nokind,obrien,rtyler',
@@ -405,10 +405,10 @@ sub run_tests {
                 };
             }
         );
-        is_deeply( \@r, [0], "\"not\" is not a hash ref ($label): returns 0" );
+        is_deeply( \@r, [ 0, 0 ], "\"not\" is not a hash ref ($label): returns 0" );
         @r =
           $quiet->( sub { eval { $class->deleteIfLowerThan( $args, $bad ) } } );
-        is_deeply( \@r, [0], "rule is not a hash ref ($label): returns 0" );
+        is_deeply( \@r, [ 0, 0 ], "rule is not a hash ref ($label): returns 0" );
     }
     is( $remaining->(), 'obrien', 'Invalid rule: only empty "not" deleted' );
     $reset->();

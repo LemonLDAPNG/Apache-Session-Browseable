@@ -82,7 +82,7 @@ sub _query {
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
     my ( $query, @bind );
-    return 0
+    return wantarray ? ( 0, 0 ) : 0
       unless ( Apache::Session::Browseable::_common->_checkThresholds($rule) );
     if ( $rule->{or} ) {
         $query = join ' OR ',
@@ -94,7 +94,7 @@ sub deleteIfLowerThan {
           map { $class->_buildLowerThanExpression( $_, $rule->{and}->{$_} ) }
           keys %{ $rule->{and} };
     }
-    return 0 unless ($query);
+    return wantarray ? ( 0, 0 ) : 0 unless ($query);
     if ( $rule->{not} and keys %{ $rule->{not} } ) {
         $query = "($query) AND " . join(
             ' AND ',
@@ -110,7 +110,7 @@ sub deleteIfLowerThan {
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
     my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
-    return 0 unless defined $rows;
+    return wantarray ? ( 0, 0 ) : 0 unless defined $rows;
 
     if (wantarray) {
         $rows = 0 if $rows == -1;
