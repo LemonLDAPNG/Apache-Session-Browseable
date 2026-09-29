@@ -32,40 +32,47 @@ plan skip_all => "$class can't be loaded"
     sub finish { return 1 }
 }
 
+# Returns the exception (if any) and the warnings
+sub check {
+    my @a = @_;
+    my @warn;
+    local $SIG{__WARN__} = sub { push @warn, @_ };
+    my $ok = eval { $class->_checkIndex(@a); 1 };
+    return ( $ok ? '' : $@, join( '', @warn ) );
+}
+
 my $args = { Index => 'uid', TableName => 'sessions' };
 
-# A generated column based on a_session is accepted, and the check is done
-# only once per handle and table
+# A generated column based on a_session is accepted silently, and the check is
+# done only once per handle and table
 my $dbh =
   FakeDbh->new( rows => [ [ 'uid', "JSON_VALUE(a_session, '\$.uid')" ] ] );
-eval { $class->_checkIndex( $dbh, $args ) };
-is( $@, '', 'generated column accepted' );
+my ( $err, $warn ) = check( $dbh, $args );
+is( $err,  '', 'generated column accepted' );
+is( $warn, '', 'no warning for a generated column' );
 is( $dbh->{prepares}, 1, 'one information_schema query' );
-eval { $class->_checkIndex( $dbh, $args ) };
+check( $dbh, $args );
 is( $dbh->{prepares}, 1, 'result is memoized' );
 ok( $dbh->{private_asb_mariadbjson_index},
     'memoized on a DBI private attribute' );
 
 # A column that exists but is not generated (migration from Browseable::MySQL)
-# must fail instead of silently returning nothing
+# is reported instead of silently returning nothing
 my $plain = FakeDbh->new( rows => [ [ 'uid', undef ] ] );
-my $err = '';
-eval { $class->_checkIndex( $plain, $args ) } or $err = $@;
-like( $err, qr/Index field "uid"/, 'plain column rejected' );
-like( $err, qr/not generated from a_session/, 'reason given' );
+( $err, $warn ) = check( $plain, $args );
+is( $err, '', 'plain column does not abort' );
+like( $warn, qr/"uid".*not generated from a_session/s, 'reason given' );
 
-# A missing column must fail too
+# A missing column is reported too
 my $missing = FakeDbh->new( rows => [] );
-$err = '';
-eval { $class->_checkIndex( $missing, $args ) } or $err = $@;
-like( $err, qr/Index field "uid"/, 'missing column rejected' );
-like( $err, qr/no column with this name/, 'reason given' );
+( $err, $warn ) = check( $missing, $args );
+is( $err, '', 'missing column does not abort' );
+like( $warn, qr/"uid".*no column with this name/s, 'reason given' );
 
-# A column generated from something else than a_session is rejected
+# A column generated from something else than a_session is reported
 my $other = FakeDbh->new( rows => [ [ 'uid', 'id' ] ] );
-$err = '';
-eval { $class->_checkIndex( $other, $args ) } or $err = $@;
-like( $err, qr/not generated from a_session/, 'foreign expression rejected' );
+( $err, $warn ) = check( $other, $args );
+like( $warn, qr/not generated from a_session/, 'foreign expression reported' );
 
 # Everything listed in Index is checked, in one query
 my $multi = FakeDbh->new(
@@ -74,12 +81,8 @@ my $multi = FakeDbh->new(
         [ 'lastSeen', undef ],
     ]
 );
-$err = '';
-eval {
-    $class->_checkIndex( $multi,
-        { Index => 'uid lastSeen', TableName => 's' } );
-}
-  or $err = $@;
-like( $err, qr/Index field "lastSeen"/, 'every Index field is checked' );
+( $err, $warn ) =
+  check( $multi, { Index => 'uid lastSeen', TableName => 's' } );
+like( $warn, qr/"lastSeen"/, 'every Index field is checked' );
 
 done_testing();

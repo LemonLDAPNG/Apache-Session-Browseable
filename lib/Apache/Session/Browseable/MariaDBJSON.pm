@@ -66,6 +66,7 @@ sub _checkIndex {
     my %expr = map { $_->[0] => $_->[1] } @{ $sth->fetchall_arrayref };
     $sth->finish;
 
+    my @unusable;
     foreach my $field (@$index) {
         next
           if ( defined( $expr{$field} )
@@ -73,12 +74,19 @@ sub _checkIndex {
         my $why = exists( $expr{$field} )
           ? 'it exists but is not generated from a_session'
           : 'there is no column with this name';
-        die "Apache::Session::Browseable::MariaDBJSON: Index field "
-          . "\"$field\" is unusable in table $table: $why. Searches on it"
-          . " would silently return nothing; add a generated column based on"
-          . " a_session (see the documentation)\n";
+        push @unusable, "\"$field\" ($why)";
     }
     $checked->{$table} = 1;
+
+    # Warn rather than die: the lookup compares names between Perl and
+    # information_schema, which can fail on an exotic name encoding even when
+    # the column is fine
+    warn "Apache::Session::Browseable::MariaDBJSON: unusable Index field(s) in"
+      . " table $table: "
+      . join( ', ', @unusable )
+      . ". Searches on them would silently return nothing; add a generated"
+      . " column based on a_session (see the documentation)\n"
+      if (@unusable);
     return;
 }
 
@@ -165,6 +173,14 @@ generated column when a query contains its expression (10.11 never does,
 
 Columns must be generated from C<a_session>: this module writes only
 C<id> and C<a_session>.
+
+=item *
+
+A column listed in C<Index> that exists but is not generated from
+C<a_session> - for example one left over from a migration from
+L<Apache::Session::Browseable::MySQL>, which wrote real columns - stays NULL,
+so searches on it silently return nothing. This module checks C<Index> once
+per database handle and warns about such fields.
 
 =item *
 
