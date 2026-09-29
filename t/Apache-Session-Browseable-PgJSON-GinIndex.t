@@ -110,12 +110,17 @@ foreach my $v (
 }
 
 # PostgreSQL numeric limits: 131072 digits before the decimal point, 16383
-# after. Larger numbers make the jsonb cast fail.
+# after. Larger numbers make the jsonb cast fail. The two limits are
+# independent, so both can be reached at once: the combined cases below lock
+# the guard when neither part alone is over its limit.
 foreach (
     [ 131072, 0,     1 ],
     [ 131073, 0,     0 ],
     [ 1,      16383, 1 ],
     [ 1,      16384, 0 ],
+    [ 131072, 16383, 1 ],
+    [ 131073, 16383, 0 ],
+    [ 131072, 16384, 0 ],
   )
 {
     my ( $int, $frac, $number ) = @$_;

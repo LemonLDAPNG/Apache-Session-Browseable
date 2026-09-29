@@ -367,6 +367,10 @@ sub run_tests {
         $mdbh->do('SET enable_seqscan = off');
         my $pi   = '3.14159265358979323846264338327950288419716939937510';
         my $big  = '1' . ( '0' x 131071 );
+
+        # Both numeric limits reached at once: PostgreSQL allows 131072 digits
+        # before the decimal point and 16383 after
+        my $bigdec = $big . '.' . ( '1' x 16383 );
         my %rows = (
             num      => '{"k":123}',
             str      => '{"k":"123"}',
@@ -379,6 +383,7 @@ sub run_tests {
             dec4     => '{"k":123.0000}',
             pi       => qq({"k":$pi}),
             big      => qq({"k":$big}),
+            bigdec   => qq({"k":$bigdec}),
             true     => '{"k":true}',
             strtrue  => '{"k":"true"}',
             false    => '{"k":false}',
@@ -431,6 +436,7 @@ sub run_tests {
             [ substr( $pi, 0, 20 ),   '' ],
             [ $big,                   'big' ],
             [ $big . '0',             '' ],
+            [ $bigdec,                'bigdec' ],
             [ '0.' . ( '1' x 16384 ), '' ],
             [ 'true',                 'strtrue,true' ],
             [ 'false',                'false' ],
