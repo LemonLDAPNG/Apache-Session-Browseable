@@ -15,6 +15,18 @@ our @ISA     = qw(Apache::Session::Browseable::DBI Apache::Session);
 sub populate {
     my $self = shift;
 
+    # Any field can be searched from a_session: setting Index would make the
+    # store write the indexed fields into columns of the same name, which
+    # don't exist in a JSON table
+    if ( $self and $self->{args} and defined $self->{args}->{Index} ) {
+        my $index =
+          ref( $self->{args}->{Index} )
+          ? $self->{args}->{Index}
+          : [ split /\s+/, $self->{args}->{Index} ];
+        die "Apache::Session::Browseable::MySQLJSON: Index must not be set\n"
+          if (@$index);
+    }
+
     $self->{object_store} = new Apache::Session::Browseable::Store::MySQL $self;
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
@@ -262,8 +274,10 @@ Use it with Perl:
        Password   => $db_pass,
   };
 
-Don't set C<Index>: any field can be searched and the store would try to
-write indexed fields into columns of the same name.
+Don't set C<Index>: any field can be searched from C<a_session> and the store
+would try to write indexed fields into columns of the same name, which don't
+exist in a JSON table. C<populate()> refuses to load the module when C<Index>
+is set.
 
 Use it like L<Apache::Session::Browseable::MySQL>
 

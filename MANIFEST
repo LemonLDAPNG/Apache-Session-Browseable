@@ -48,6 +48,7 @@ t/Apache-Session-Browseable-LDAP.t
 t/Apache-Session-Browseable-lowerThan.t
 t/Apache-Session-Browseable-MySQL.t
 t/Apache-Session-Browseable-MySQLJSON.t
+t/Apache-Session-Browseable-MySQLJSON-populate.t
 t/Apache-Session-Browseable-Patroni.t
 t/Apache-Session-Browseable-PgHstore.t
 t/Apache-Session-Browseable-PgJSON.t
