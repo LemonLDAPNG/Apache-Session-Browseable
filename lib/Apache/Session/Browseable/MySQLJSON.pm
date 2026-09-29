@@ -261,7 +261,7 @@ __END__
 
 =head1 NAME
 
-Apache::Session::Browseable::MySQL - Add index and search methods to
+Apache::Session::Browseable::MySQLJSON - Add index and search methods to
 Apache::Session::MySQL
 
 =head1 SYNOPSIS
