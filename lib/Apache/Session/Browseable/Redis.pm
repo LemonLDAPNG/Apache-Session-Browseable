@@ -43,9 +43,13 @@ our $SREM_ORPHAN = q{if redis.call('exists',KEYS[2])==0 then }
 sub _readIndex {
     my ( $class, $args, $redisObj, $set, $skip ) = @_;
     my @keys = eval { $redisObj->smembers($set) };
+
+    # Like the MGET below: a transient error (MOVED, LOADING, timeout...)
+    # must not break the whole search, and must not lose any data
     if ($@) {
         return {} if ( $@ =~ /WRONGTYPE/ );
-        die $@;
+        print STDERR "Error when reading index $set: $@\n";
+        return {};
     }
     @keys = grep {
               $_
