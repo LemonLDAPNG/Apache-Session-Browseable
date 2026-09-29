@@ -28,12 +28,21 @@ sub unserialize {
     $session->{data} = $data;
 }
 
+# For stores that never return UTF-8 bytes (Redis stores Latin-1)
+sub unserializeLatin1 {
+    my ( $session, $next ) = @_;
+
+    my $data = _unserialize( $session->{serialized}, $next, 1 );
+    die "Session could not be unserialized" unless defined $data;
+    $session->{data} = $data;
+}
+
 sub _unserialize {
-    my ( $serialized, $next ) = @_;
+    my ( $serialized, $next, $latin1 ) = @_;
     my $tmp;
 
     # Some stores (MySQL json columns, files,...) return UTF-8 bytes
-    if ( defined $serialized and !utf8::is_utf8($serialized) ) {
+    if ( defined $serialized and !$latin1 and !utf8::is_utf8($serialized) ) {
         $tmp = eval { $utf8Json->decode($serialized) };
         return $tmp unless ($@);
     }
@@ -72,6 +81,13 @@ and C<from_json>. The serialized data is UTF-8 text.
 When reading, a string returned as bytes by the store (not flagged as UTF-8,
 for example a MySQL C<json> column) is first decoded as UTF-8 JSON; if it is
 not valid UTF-8, it is read as characters.
+
+Some stores return Latin-1 bytes instead: files when the session holds only
+Latin-1 characters, and Redis, which can't store other characters. A Latin-1
+session that is also valid UTF-8 is then read as UTF-8: for example "Ã©"
+becomes "é". This needs every non-ASCII character of the session to be part
+of such a sequence (mostly values that are already mojibake). The Redis
+backend avoids it with C<unserializeLatin1()>, which skips the UTF-8 decode.
 
 
 =head1 SEE ALSO
