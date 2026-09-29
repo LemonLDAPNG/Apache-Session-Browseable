@@ -13,6 +13,8 @@ run_tests(
           . " ( (a_session ->> '_whatToTrace') text_pattern_ops )",
         'CREATE INDEX __TABLE___u1 ON __TABLE__'
           . " ( ( cast(a_session ->> '_utime' AS bigint) ) )",
+        'CREATE INDEX __TABLE___ls1 ON __TABLE__'
+          . " ( ( cast(a_session ->> '_lastSeen' AS bigint) ) )",
     ],
     json    => 1,
     null    => 1,
@@ -20,12 +22,17 @@ run_tests(
     scs     => 1,
     explain => sub {
         my ($class) = @_;
-        my $wt = $class->_sqlField('_whatToTrace');
+        my ( $ut, $ls ) =
+          map { $class->_buildLowerThanExpression( $_, 200 ) }
+          qw(_utime _lastSeen);
+        my ( $wt, $sk ) =
+          map { $class->_sqlField($_) } qw(_whatToTrace _session_kind);
         return (
+            [ 'deleteIfLowerThan', $ut, '__TABLE___u1' ],
             [
-                'deleteIfLowerThan',
-                $class->_buildLowerThanExpression( '_utime', 200 ),
-                '__TABLE___u1'
+                'deleteIfLowerThan "or" with "not"',
+                "($ut OR $ls) AND ($sk IS NULL OR $sk <> 'Persistent')",
+                [ '__TABLE___u1', '__TABLE___ls1' ]
             ],
             [ 'searchOnExpr', "$wt like 'dw%'", '__TABLE___uid1' ],
             [ 'searchOn',     "$wt = 'dwho'",   '__TABLE___uid1' ],

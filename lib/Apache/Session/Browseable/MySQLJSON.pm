@@ -257,10 +257,13 @@ indexes:
       as_sk varchar(32) AS (a_session->>'$._session_kind') VIRTUAL,
       as_ut bigint unsigned
           AS (cast(a_session->>'$._utime' as unsigned)) VIRTUAL,
+      as_ls bigint unsigned
+          AS (cast(a_session->>'$._lastSeen' as unsigned)) VIRTUAL,
       as_ip varchar(64) AS (a_session->>'$.ipAddr') VIRTUAL,
       KEY as_wt (as_wt),
       KEY as_sk (as_sk),
       KEY as_ut (as_ut),
+      KEY as_ls (as_ls),
       KEY as_ip (as_ip)
   ) ENGINE=InnoDB;
 
@@ -268,23 +271,37 @@ MySQL uses the index of a generated column only when the query contains the
 same expression, so keep these expressions exactly as written: they are the
 ones used by this module (C<-E<gt>E<gt>> returns unquoted values whereas
 C<-E<gt>> keeps JSON quotes). MySQL doesn't use them for C<LIKE> queries, so
-searchOnExpr() always scans the table. With strict SQL mode, a value longer
-than its generated column makes the session storage fail: size them
-accordingly.
+searchOnExpr() always scans the table.
+
+C<as_ls> is needed when Lemonldap::NG "timeoutActivity" is used: sessions purge
+then deletes sessions whose C<_utime> B<or> C<_lastSeen> is too old, and an
+C<OR> with a non indexed side forces a full table scan (with both keys, MySQL
+uses an C<index_merge>).
+
+With strict SQL mode (default since MySQL 5.7), a value that doesn't fit its
+indexed generated column makes the session storage fail: a string longer than
+the column, or a non integer C<_utime> or C<_lastSeen> value
+(C<cast('1.5' as unsigned)> is an error in this case). Size C<varchar> columns
+generously; Lemonldap::NG always writes integer C<_utime> and C<_lastSeen>.
 
 Generated columns documented by previous versions (using C<-E<gt>>) were
-never used. To fix an existing table, re-create them:
+never used. To fix an existing table, drop those you created:
 
   ALTER TABLE sessions DROP COLUMN as_wt, DROP COLUMN as_sk,
       DROP COLUMN as_ut, DROP COLUMN as_ip;
+
+then create the new ones:
+
   ALTER TABLE sessions
       ADD COLUMN as_wt varchar(255) AS (a_session->>'$._whatToTrace') VIRTUAL,
       ADD COLUMN as_sk varchar(32) AS (a_session->>'$._session_kind') VIRTUAL,
       ADD COLUMN as_ut bigint unsigned
           AS (cast(a_session->>'$._utime' as unsigned)) VIRTUAL,
+      ADD COLUMN as_ls bigint unsigned
+          AS (cast(a_session->>'$._lastSeen' as unsigned)) VIRTUAL,
       ADD COLUMN as_ip varchar(64) AS (a_session->>'$.ipAddr') VIRTUAL,
       ADD KEY as_wt (as_wt), ADD KEY as_sk (as_sk),
-      ADD KEY as_ut (as_ut), ADD KEY as_ip (as_ip);
+      ADD KEY as_ut (as_ut), ADD KEY as_ls (as_ls), ADD KEY as_ip (as_ip);
 
 Use it with Perl:
 

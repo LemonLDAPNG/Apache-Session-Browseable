@@ -12,17 +12,23 @@ run_tests(
           . ' a_session text, uid text, _whatToTrace text, _session_kind text,'
           . ' _utime bigint, _lastSeen bigint)',
         'CREATE INDEX __TABLE___u1 ON __TABLE__ (_utime)',
+        'CREATE INDEX __TABLE___ls1 ON __TABLE__ (_lastSeen)',
         'CREATE INDEX __TABLE___uid1 ON __TABLE__'
           . ' USING BTREE (_whatToTrace text_pattern_ops)',
     ],
     index   => 'uid _whatToTrace _session_kind _utime _lastSeen',
     explain => sub {
         my ($class) = @_;
+        my ( $ut, $ls ) =
+          map { $class->_buildLowerThanExpression( $_, 200 ) }
+          qw(_utime _lastSeen);
+        my $sk = '_session_kind';
         return (
+            [ 'deleteIfLowerThan', $ut, '__TABLE___u1' ],
             [
-                'deleteIfLowerThan',
-                $class->_buildLowerThanExpression( '_utime', 200 ),
-                '__TABLE___u1'
+                'deleteIfLowerThan "or" with "not"',
+                "($ut OR $ls) AND ($sk IS NULL OR $sk <> 'Persistent')",
+                [ '__TABLE___u1', '__TABLE___ls1' ]
             ],
             [ 'searchOnExpr', "_whatToTrace LIKE 'dw%'", '__TABLE___uid1' ],
             [ 'searchOn',     "_whatToTrace = 'dwho'",   '__TABLE___uid1' ],

@@ -12,15 +12,22 @@ run_tests(
           . ' a_session text, uid varchar(64), _whatToTrace varchar(64),'
           . ' _session_kind varchar(64), _utime bigint, _lastSeen bigint)',
         'CREATE INDEX u1 ON __TABLE__ (_utime)',
+        'CREATE INDEX ls1 ON __TABLE__ (_lastSeen)',
         'CREATE INDEX uid1 ON __TABLE__ (_whatToTrace) USING BTREE',
     ],
     index   => 'uid _whatToTrace _session_kind _utime _lastSeen',
     explain => sub {
         my ($class) = @_;
+        my ( $ut, $ls ) =
+          map { $class->_buildLowerThanExpression( $_, 200 ) }
+          qw(_utime _lastSeen);
+        my $sk = '_session_kind';
         return (
+            [ 'deleteIfLowerThan', $ut, 'u1' ],
             [
-                'deleteIfLowerThan',
-                $class->_buildLowerThanExpression( '_utime', 200 ), 'u1'
+                'deleteIfLowerThan "or" with "not"',
+                "($ut OR $ls) AND ($sk IS NULL OR $sk <> 'Persistent')",
+                [ 'u1', 'ls1' ]
             ],
             [ 'searchOnExpr', "_whatToTrace LIKE 'dw%'", 'uid1' ],
         );
