@@ -373,8 +373,10 @@ sub _lowerThanFilter {
     my $lt  = $rule->{ $op[0] };
     my $not = $rule->{not} || {};
     return unless ( ref $lt eq 'HASH' and %$lt and ref $not eq 'HASH' );
-    foreach ( values %$lt ) {
-        unless ( defined $_ and !ref $_ and $_ =~ $numRe ) {
+    foreach my $v ( values %$lt ) {
+        my $t = ( defined $v and !ref $v ) ? $v : '';
+        $t =~ s/^\s+|\s+$//g;
+        unless ( $t =~ $numRe ) {
             print STDERR "deleteIfLowerThan: threshold must be a number\n";
             return;
         }
@@ -575,8 +577,8 @@ to C<Index>, are missed until they are rewritten.
 Deletes sessions where one (C<or>) or all (C<and>) of the given fields are
 strictly lower than their threshold, and where each C<not> field is missing
 or has another value. Exactly one of C<or> and C<and> must be given, and
-thresholds must be decimal numbers. A missing field, or one which isn't a
-number, is never lower.
+thresholds must be decimal numbers (surrounding spaces are ignored). A missing
+field, or one which isn't a number, is never lower.
 
 Only the index is used: every field of the rule must be listed in C<Index>.
 For Lemonldap::NG sessions purge, index C<_session_kind> and C<_utime>, plus

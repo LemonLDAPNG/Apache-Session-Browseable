@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 110;
+plan tests => 115;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -186,6 +186,16 @@ is(
     '_lowerThanFilter: single field, no "not"'
 );
 is(
+    ltFilter( { or => { _utime => " 1000\t" } } ),
+    '(&(objectClass=applicationProcess)(ou=_utime_*))',
+    '_lowerThanFilter: threshold spaces ignored'
+);
+is(
+    ltFilter( { or => { _utime => ' 0 ' } } ),
+    '(&(objectClass=applicationProcess)(ou=_utime_*))',
+    '_lowerThanFilter: threshold " 0 " accepted'
+);
+is(
     ltFilter( { or => { _utime => 1 }, not => { uid => 'a*)(|(cn=*' } } ),
     '(&(objectClass=applicationProcess)(ou=_utime_*)'
       . '(!(ou=uid_a\2a\29\28|\28cn=\2a)))',
@@ -217,6 +227,7 @@ is(
         [ { or  => { _utime => 1 }, and => { _utime => 1 } }, 'or + and' ],
         [ { or  => { _utime => 'abc' } },                     'threshold abc' ],
         [ { or  => { _utime => '1e3' } },                     'threshold 1e3' ],
+        [ { or  => { _utime => ' 1e3 ' } }, 'threshold " 1e3 "' ],
         [ { or  => { _utime => '1 OR 1' } }, 'threshold 1 OR 1' ],
         [ { or  => { _utime => undef } },    'threshold undef' ],
         [ { or  => { foo => 1 } },           'field not indexed' ],
@@ -231,6 +242,18 @@ is(
     {
         ok( !defined ltFilter( $_->[0] ), "_lowerThanFilter rejects $_->[1]" );
     }
+}
+
+# An unusable "not" value (empty or "0") is a silent fallback, not an error
+{
+    my $err = '';
+    local *STDERR;
+    open STDERR, '>', \$err;
+    ok(
+        !defined ltFilter( { or => { _utime => 1 }, not => { uid => '0' } } ),
+        '_lowerThanFilter: "not" 0 rejected'
+    );
+    is( $err, '', '_lowerThanFilter: "not" 0 rejected without message' );
 }
 
 # _matchLowerThan
