@@ -47,10 +47,10 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
   CREATE TABLE sessions (
       id varchar(64) not null primary key,
       a_session text,
-      _whatToTrace text,
-      _session_kind text,
+      _whatToTrace varchar(255),
+      _session_kind varchar(32),
       _utime bigint,
-      ipAddr text
+      ipAddr varchar(64)
   );
 
 Add indexes:
@@ -59,6 +59,10 @@ Add indexes:
   CREATE INDEX s1   ON sessions (_session_kind);
   CREATE INDEX u1   ON sessions (_utime);
   CREATE INDEX ip1  ON sessions (ipAddr) USING BTREE;
+
+Indexed columns can't be C<text>: MySQL can't index them without a prefix
+length. C<_utime> must be numeric (C<bigint>) so that deleteIfLowerThan() can
+use its index.
 
 Use it with Perl:
 
