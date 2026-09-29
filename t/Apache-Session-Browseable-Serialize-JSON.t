@@ -79,6 +79,22 @@ $session = { serialized => 'null' };
 eval { Apache::Session::Serialize::JSON::unserialize($session) };
 like( $@, qr/could not be unserialized/, 'unserialize dies on null' );
 
+# unserializeLatin1() never decodes UTF-8
+$session = { serialized => qq'{"cn":"\xc3\xa9"}' };
+Apache::Session::Serialize::JSON::unserializeLatin1($session);
+is( $session->{data}->{cn}, "\xc3\xa9", 'unserializeLatin1 with bytes' );
+$session = { serialized => $chars };
+Apache::Session::Serialize::JSON::unserializeLatin1($session);
+is_deeply(
+    $session->{data},
+    { cn => $wide, sn => $latin },
+    'unserializeLatin1 with characters'
+);
+$session = { serialized => encode_base64( freeze( { a => 1 } ) ) };
+Apache::Session::Serialize::JSON::unserializeLatin1( $session,
+    sub { Storable::thaw( decode_base64( $_[0] ) ) } );
+is_deeply( $session->{data}, { a => 1 }, 'unserializeLatin1 fallback' );
+
 # Storable fallback
 my $data = { cn => $wide, sn => $latin, n => [ 1 .. 200 ] };
 like( freeze($data), qr/[\x80-\xff]/, 'Storable data contains high bytes' );

@@ -20,7 +20,8 @@ sub populate {
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
     $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
     $self->{serialize}    = \&Apache::Session::Serialize::JSON::serialize;
-    $self->{unserialize}  = \&Apache::Session::Serialize::JSON::unserialize;
+    $self->{unserialize} =
+      \&Apache::Session::Serialize::JSON::unserializeLatin1;
 
     return $self;
 }
@@ -28,7 +29,7 @@ sub populate {
 sub unserialize {
     my $session = shift;
     my $tmp     = { serialized => $session };
-    Apache::Session::Serialize::JSON::unserialize($tmp);
+    Apache::Session::Serialize::JSON::unserializeLatin1($tmp);
     return $tmp->{data};
 }
 

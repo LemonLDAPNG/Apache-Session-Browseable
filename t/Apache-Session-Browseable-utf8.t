@@ -79,10 +79,11 @@ SKIP: {
     );
 }
 
-# Redis can't store characters above U+00FF
+# Redis can't store characters above U+00FF. It stores Latin-1, so
+# "\x{c3}\x{a9}" is stored as valid UTF-8: it must not be read as "\x{e9}"
 SKIP: {
-    skip 'Set REDIS_URL to run Redis tests', 7 unless $ENV{REDIS_URL};
-    skip 'Redis module is needed', 7
+    skip 'Set REDIS_URL to run Redis tests', 14 unless $ENV{REDIS_URL};
+    skip 'Redis module is needed', 14
       unless eval { require Apache::Session::Browseable::Redis; 1 };
     roundTrip(
         'Redis',
@@ -92,7 +93,8 @@ SKIP: {
             database => $ENV{REDIS_DBNUM} || 15,
             Index    => 'uid'
         },
-        $latin
+        $latin,
+        "\x{c3}\x{a9}"
     );
 }
 
