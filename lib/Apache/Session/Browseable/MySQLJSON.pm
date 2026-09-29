@@ -367,12 +367,13 @@ sessions and add the capability to index some fields to make research faster.
 Apache::Session::Browseable::MySQLJSON implements it for MySQL databases
 using "json" type to be able to browse sessions.
 
-THIS MODULE ISN'T USABLE WITH MARIADB FOR NOW.
+This module isn't usable with MariaDB: use
+L<Apache::Session::Browseable::MariaDBJSON> instead.
 
 =head1 SEE ALSO
 
 L<Apache::Session>, L<Apache::Session::Browseable::MySQL>,
-L<http://lemonldap-ng.org>
+L<Apache::Session::Browseable::MariaDBJSON>, L<http://lemonldap-ng.org>
 
 =head1 COPYRIGHT AND LICENSE
 
