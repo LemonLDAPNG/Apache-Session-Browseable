@@ -126,6 +126,23 @@ my ( $ids, $res, @res, $rule, $ret, $err );
     }
 }
 
+# 12. Subclass without its own populate()
+{
+
+    package My::SQLiteSubclass;
+    our @ISA = ('Apache::Session::Browseable::SQLite');
+}
+$res = eval { My::SQLiteSubclass->get_key_from_all_sessions($args) };
+is( $@, '', 'Subclass without populate: no error' );
+is( join( ',', sort map { $_->{uid} } values %{ $res || {} } ),
+    'u1,u2,u3', 'Subclass without populate: all sessions returned' );
+$res = eval {
+    My::SQLiteSubclass->get_key_from_all_sessions( $args,
+        sub { $_[0]->{uid} } );
+};
+is( join( ',', sort values %{ $res || {} } ),
+    'u1,u2,u3', 'Subclass without populate: callback called' );
+
 done_testing();
 
 END {
