@@ -344,7 +344,8 @@ my $err    = stderrOf(
           )
         {
             my @r = $package->deleteIfLowerThan( $args, $_->[0] );
-            ok( !$r[0], "deleteIfLowerThan: $_->[1] returns false" );
+            is_deeply( \@r, [ 0, 0 ],
+                "deleteIfLowerThan: $_->[1] returns ( 0, 0 )" );
         }
     }
 );
@@ -359,7 +360,7 @@ $err = stderrOf(
             { or                 => { _utime => 10**9 } } );
     }
 );
-ok( !$r[0], 'deleteIfLowerThan: connection error returns false' );
+is_deeply( \@r, [ 0, 0 ], 'deleteIfLowerThan: connection error returns ( 0, 0 )' );
 like( $err, qr/unable to connect/, 'Connection error is reported' );
 is_deeply( remaining(), $before, 'Connection error deleted nothing' );
 

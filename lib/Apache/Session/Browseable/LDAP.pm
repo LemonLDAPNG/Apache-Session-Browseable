@@ -239,17 +239,18 @@ sub get_key_from_all_sessions {
 # Only index values are read: candidates are selected by the directory, then
 # checked in Perl. Returns false if the rule can't be evaluated this way (the
 # caller then falls back to a full scan), true on success; in list context,
-# also the number of deleted sessions. On an error after deletions started,
-# returns false with the number of sessions already deleted.
+# also the number of deleted sessions: 0 when it returns false, otherwise the
+# number deleted, or already deleted if an error stops the deletions.
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
-    my $filter = $class->_lowerThanFilter( $args, $rule ) or return 0;
+    my $filter = $class->_lowerThanFilter( $args, $rule )
+      or return wantarray ? ( 0, 0 ) : 0;
 
     my $ldap =
       eval { Apache::Session::Browseable::Store::LDAP->fromArgs($args)->ldap };
     unless ($ldap) {
         print STDERR "deleteIfLowerThan: unable to connect: $@\n";
-        return 0;
+        return wantarray ? ( 0, 0 ) : 0;
     }
 
     # Collect first: nothing is deleted if the search fails
@@ -619,12 +620,13 @@ considered missing, and a C<not> value empty or C<0> is refused.
 
 =back
 
-Returns false, deleting nothing, if the rule can't be handled this way (non
-indexed field, invalid threshold...) or if the connection or the search
-fails: Lemonldap::NG then falls back to reading all sessions. Otherwise
-returns true and, in list context, the number of deleted sessions (sessions
-removed or updated meanwhile aren't counted). If a deletion fails, stops and
-returns false, and in list context the number of sessions already deleted.
+Returns false, deleting nothing (0 in list context), if the rule can't be
+handled this way (non indexed field, invalid threshold...) or if the
+connection or the search fails: Lemonldap::NG then falls back to reading all
+sessions. Otherwise returns true and, in list context, the number of deleted
+sessions (sessions removed or updated meanwhile aren't counted). If a deletion
+fails, stops and returns false, and in list context the number of sessions
+already deleted.
 
 =head2 Size limits
 

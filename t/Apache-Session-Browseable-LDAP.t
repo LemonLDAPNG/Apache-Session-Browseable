@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 108;
+plan tests => 110;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -360,3 +360,17 @@ like( $err, qr/no paged results control/,
 ( $entries, $err ) = pagedSearchRun( [ MockSearchResult->new( ['a'] ) ], 2 );
 is_deeply( $entries, ['a'], '_pagedSearch: no control, partial page' );
 is( $err, '', '_pagedSearch: partial page without control, no warning' );
+
+# deleteIfLowerThan: unusable rules keep the (ok, count) contract
+{
+    local *STDERR;
+    open STDERR, '>', \my $err;
+    my @r = $browseable->deleteIfLowerThan( { Index => 'uid _utime' },
+        { or => { foo => 1 } } );
+    is_deeply( \@r, [ 0, 0 ], 'deleteIfLowerThan: bad rule returns ( 0, 0 )' );
+    ok(
+        !$browseable->deleteIfLowerThan( { Index => 'uid _utime' },
+            { or => { foo => 1 } } ),
+        'deleteIfLowerThan: bad rule false in scalar context'
+    );
+}
