@@ -100,7 +100,7 @@ sub deleteIfLowerThan {
           keys %{ $rule->{and} };
     }
     return 0 unless ($query);
-    if ( $rule->{not} ) {
+    if ( $rule->{not} and keys %{ $rule->{not} } ) {
         $query = "($query) AND " . join(
             ' AND ',
             map {

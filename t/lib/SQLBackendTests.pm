@@ -327,6 +327,30 @@ sub run_tests {
     is( $remaining->(), 'dwho,nokind,obrien,rtyler',
         'Nothing deleted with "and"' );
 
+    # An empty "not" is ignored; invalid rules are rejected without exception
+    $reset->();
+    @r = $class->deleteIfLowerThan( $args,
+        { or => { _utime => 200 }, not => {} } );
+    is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan with an empty "not"' );
+
+    foreach my $bad ( 'x', [ _utime => 200 ], \'x' ) {
+        my $label = ref($bad) || $bad;
+        @r = $quiet->(
+            sub {
+                eval {
+                    $class->deleteIfLowerThan( $args,
+                        { or => { _utime => 200 }, not => $bad } );
+                };
+            }
+        );
+        is_deeply( \@r, [0], "\"not\" is not a hash ref ($label): returns 0" );
+        @r =
+          $quiet->( sub { eval { $class->deleteIfLowerThan( $args, $bad ) } } );
+        is_deeply( \@r, [0], "rule is not a hash ref ($label): returns 0" );
+    }
+    is( $remaining->(), 'obrien', 'Invalid rule: only empty "not" deleted' );
+    $reset->();
+
     @r = $class->deleteIfLowerThan( $args, { or => { _utime => '100.5' } } );
     is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan with a decimal threshold' );
 
