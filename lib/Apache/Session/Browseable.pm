@@ -89,6 +89,11 @@ C<searchOn()> and C<searchOnExpr()> do not find them, and the C<not> clause of
 C<deleteIfLowerThan()> (which matches C<NULL> columns) can delete them. For
 example, a purge rule like C<< not =E<gt> { _session_kind =E<gt> 'Persistent' } >>
 would delete persistent sessions whose C<_session_kind> column was never filled.
+Conversely, a column that was never filled never matches the C<or>/C<and>
+thresholds of C<deleteIfLowerThan()> (a C<NULL> column is never lower than a
+value): these sessions are not purged through that field. For example, a rule
+on C<_lastSeen> alone would never purge them, while Lemonldap::NG's rule also
+has C<_utime>, which still purges them.
 
 So, before relying on a new column, backfill it from the serialized data. These
 examples assume the JSON serializer and a table named C<sessions> whose
