@@ -26,5 +26,44 @@ sub populate {
     return $self;
 }
 
+# Index columns are double-quoted, see Apache::Session::Browseable::Store::Oracle
+sub _quoteColumn {
+    my ( $class, $dbh, $field ) = @_;
+    return Apache::Session::Browseable::Store::Oracle->_quoteColumn($field);
+}
+
+# Oracle returns unquoted column names (id) in upper case and quoted ones
+# (index columns) in their own case: read them in lower case, then restore
+# the case of the requested fields
+sub _classDbh {
+    my $class = shift;
+    my $dbh   = $class->SUPER::_classDbh(@_);
+    $dbh->{FetchHashKeyName} = 'NAME_lc';
+    return $dbh;
+}
+
+sub searchOn {
+    my $class = shift;
+    my ( $args, $selectField, $value, @fields ) = @_;
+    my $res = $class->SUPER::searchOn(@_);
+    return $class->_restoreCase( $res, @fields );
+}
+
+sub searchOnExpr {
+    my $class = shift;
+    my ( $args, $selectField, $value, @fields ) = @_;
+    my $res = $class->SUPER::searchOnExpr(@_);
+    return $class->_restoreCase( $res, @fields );
+}
+
+sub get_key_from_all_sessions {
+    my ( $class, $args, $data ) = @_;
+    my $res = $class->SUPER::get_key_from_all_sessions( @_[ 1 .. $#_ ] );
+    if ( defined $data and ref($data) ne 'CODE' ) {
+        $class->_restoreCase( $res, ref($data) eq 'ARRAY' ? @$data : $data );
+    }
+    return $res;
+}
+
 1;
 
