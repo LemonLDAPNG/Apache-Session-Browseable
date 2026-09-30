@@ -20,20 +20,31 @@ sub roundTrip {
         my $id = $session{_session_id};
         untie %session;
 
+        my $check = sub {
+            my ($step) = @_;
+            my $l = "$l$step";
+            tie %session, $class, $id, $args;
+            is( $session{cn}, $v, "$l retrieved" );
+            is_deeply( $session{list}, [$v], "$l in array retrieved" );
+            untie %session;
+            my $r = $class->get_key_from_all_sessions($args);
+            is( $r->{$id}->{cn}, $v, "$l: get_key_from_all_sessions" );
+            $r = $class->get_key_from_all_sessions( $args, sub { $_[0]->{cn} } );
+            is( $r->{$id}, $v, "$l: get_key_from_all_sessions with a code ref" );
+            $r = $class->get_key_from_all_sessions( $args, ['cn'] );
+            is( $r->{$id}->{cn}, $v, "$l: get_key_from_all_sessions with fields" );
+            $r = $class->searchOn( $args, 'uid', 'u8' );
+            is( $r->{$id}->{cn}, $v, "$l: searchOn" );
+            $r = $class->searchOn( $args, 'uid', 'u8', 'cn' );
+            is( $r->{$id}->{cn}, $v, "$l: searchOn with fields" );
+        };
+        $check->('');
+
+        # Update the session: the stores rewrite the non-ASCII values
         tie %session, $class, $id, $args;
-        is( $session{cn}, $v, "$l retrieved" );
-        is_deeply( $session{list}, [$v], "$l in array retrieved" );
+        $session{x} = 1;
         untie %session;
-        my $r = $class->get_key_from_all_sessions($args);
-        is( $r->{$id}->{cn}, $v, "$l: get_key_from_all_sessions" );
-        $r = $class->get_key_from_all_sessions( $args, sub { $_[0]->{cn} } );
-        is( $r->{$id}, $v, "$l: get_key_from_all_sessions with a code ref" );
-        $r = $class->get_key_from_all_sessions( $args, ['cn'] );
-        is( $r->{$id}->{cn}, $v, "$l: get_key_from_all_sessions with fields" );
-        $r = $class->searchOn( $args, 'uid', 'u8' );
-        is( $r->{$id}->{cn}, $v, "$l: searchOn" );
-        $r = $class->searchOn( $args, 'uid', 'u8', 'cn' );
-        is( $r->{$id}->{cn}, $v, "$l: searchOn with fields" );
+        $check->(' after update');
 
         tie %session, $class, $id, $args;
         tied(%session)->delete;
@@ -85,7 +96,7 @@ my $dir = tempdir( CLEANUP => 1 );
 }
 
 SKIP: {
-    skip 'DBD::SQLite is needed', 28
+    skip 'DBD::SQLite is needed', 56
       unless eval { require DBI; require DBD::SQLite; 1 };
     require Apache::Session::Browseable::SQLite;
     my $ds  = "dbi:SQLite:$dir/sessions.db";
@@ -111,8 +122,8 @@ SKIP: {
 # Redis can't store characters above U+00FF. It stores Latin-1, so
 # "\x{c3}\x{a9}" is stored as valid UTF-8: it must not be read as "\x{e9}"
 SKIP: {
-    skip 'Set REDIS_URL to run Redis tests', 23 unless $ENV{REDIS_URL};
-    skip 'Redis module is needed', 23
+    skip 'Set REDIS_URL to run Redis tests', 37 unless $ENV{REDIS_URL};
+    skip 'Redis module is needed', 37
       unless eval { require Apache::Session::Browseable::Redis; 1 };
     my $class = 'Apache::Session::Browseable::Redis';
     my $args  = {
