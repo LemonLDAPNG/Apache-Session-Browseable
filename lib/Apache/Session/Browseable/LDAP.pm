@@ -102,7 +102,7 @@ sub _searchCmp {
       : "($args->{ldapAttributeId}=*)";
     my %res = ();
     my $ldap =
-      eval { Apache::Session::Browseable::Store::LDAP->fromArgs($args)->ldap };
+      eval { Apache::Session::Browseable::Store::LDAP->new($args)->ldap };
     unless ($ldap) {
         print STDERR "$name: unable to connect: $@\n";
         return {};
@@ -247,7 +247,7 @@ sub deleteIfLowerThan {
       or return wantarray ? ( 0, 0 ) : 0;
 
     my $ldap =
-      eval { Apache::Session::Browseable::Store::LDAP->fromArgs($args)->ldap };
+      eval { Apache::Session::Browseable::Store::LDAP->new($args)->ldap };
     unless ($ldap) {
         print STDERR "deleteIfLowerThan: unable to connect: $@\n";
         return wantarray ? ( 0, 0 ) : 0;
