@@ -38,6 +38,19 @@ sub unserialize {
 our $SREM_ORPHAN = q{if redis.call('exists',KEYS[2])==0 then }
   . q{return redis.call('srem',KEYS[1],KEYS[2]) end return 0};
 
+# Keys per MGET: a huge index set must not block Redis with one big command
+our $MGET_BATCH = 500;
+
+# Like $redisObj->mget(@keys), in batches
+sub _mget {
+    my ( $redisObj, @keys ) = @_;
+    my @res;
+    while (@keys) {
+        push @res, $redisObj->mget( splice( @keys, 0, $MGET_BATCH ) );
+    }
+    return @res;
+}
+
 # Sessions of index set $set, except those in %$skip: { id => session }.
 # Members that may belong to another app are neither read nor removed
 sub _readIndex {
@@ -59,7 +72,7 @@ sub _readIndex {
     return {} unless (@keys);
 
     # MGET returns undef for missing keys and keys that aren't strings
-    my @values = eval { $redisObj->mget(@keys) };
+    my @values = eval { _mget( $redisObj, @keys ) };
     if ($@) {
         print STDERR "Error when reading index $set: $@\n";
         return {};
