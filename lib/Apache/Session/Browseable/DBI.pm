@@ -76,8 +76,13 @@ sub _searchCompare {
         );
     }
     my $query = $class->_buildCompareExpression( $field, $op, $value );
-    return $class->_query( $args, $field, $value,
-        { query => $query, values => [] }, @fields );
+    return $class->_searchQuery(
+        $op,
+        sub {
+            $class->_query( $args, $field, $value,
+                { query => $query, values => [] }, @fields );
+        }
+    );
 }
 
 sub _query {

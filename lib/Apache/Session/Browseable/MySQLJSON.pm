@@ -73,7 +73,8 @@ sub _searchCompare {
         ),
         values => []
     };
-    return $class->_query( $args, $query, @fields );
+    return $class->_searchQuery( $op,
+        sub { $class->_query( $args, $query, @fields ) } );
 }
 
 sub _query {

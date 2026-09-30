@@ -49,6 +49,21 @@ sub _checkSearchValue {
     return $value;
 }
 
+# Run the SQL query of searchLt() and searchGt(): the database may reject
+# the comparison (a cast of a text column, for example). Print the error and
+# return an empty result, as the Perl version does for non numeric values
+sub _searchQuery {
+    my ( $class, $op, $sub ) = @_;
+    my $res = eval { $sub->() };
+    if ($@) {
+        my $err = $@;
+        chomp $err;
+        print STDERR 'search' . ( $op eq '<' ? 'Lt' : 'Gt' ) . ": $err\n";
+        return {};
+    }
+    return $res;
+}
+
 # Perl version of searchLt() and searchGt(): read all sessions and keep those
 # for which $test->( value of $selectField ) is true
 sub _searchByTest {

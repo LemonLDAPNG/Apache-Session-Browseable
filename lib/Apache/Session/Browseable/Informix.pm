@@ -50,7 +50,8 @@ around the value are ignored.
 Fields listed in C<Index> are compared in SQL as integers
 (C<cast(field as integer)>), other fields in Perl after reading all sessions.
 Depending on the database, the cast rounds or truncates values that are not
-integers, or fails on non-numeric ones, whereas Perl compares their numeric
+integers, or rejects non-numeric ones: the query then fails, nothing is
+returned and the error is printed on STDERR. Perl compares their numeric
 value: store integers in indexed fields.
 
 Sessions without the field are never returned, whereas the Perl fallback of

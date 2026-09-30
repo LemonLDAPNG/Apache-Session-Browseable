@@ -233,6 +233,9 @@ around the value are ignored.
 Fields listed in C<Index> are compared in SQL as C<deleteIfLowerThan()> does
 (C<cast(field as bigint)>), so the index of the column is used with an
 integer value. Other fields are compared in Perl after reading all sessions.
+The cast fails if the column of an indexed field contains a value that is not
+an integer (a C<text> column, for example): searchLt() and searchGt() then
+return nothing and print the error on STDERR.
 
 Sessions without the field are never returned. This differs from the Perl
 fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()

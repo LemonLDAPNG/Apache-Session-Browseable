@@ -64,7 +64,8 @@ sub _searchCompare {
         query  => $class->_buildCompareExpression( $selectField, $op, $value ),
         values => []
     };
-    return $class->_query( $args, $query, @fields );
+    return Apache::Session::Browseable::_common->_searchQuery( $op,
+        sub { $class->_query( $args, $query, @fields ) } );
 }
 
 sub _query {
@@ -309,7 +310,8 @@ Fields are compared in SQL as deleteIfLowerThan() does
 (C<cast(a_session -E<gt> 'field' AS bigint)>): an expression index declared
 exactly as C<u1> or C<rt1> above is used with an integer value. As for
 deleteIfLowerThan(), the query fails if it reads a session where this field
-is not an integer.
+is not an integer: searchLt() and searchGt() then return nothing and print the
+error on STDERR.
 
 Sessions without the field are never returned. This differs from the Perl
 fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()

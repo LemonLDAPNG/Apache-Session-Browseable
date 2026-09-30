@@ -317,6 +317,19 @@ my $quoteArgs = { %$args, Index => [ 'uid', "a'b" ] };
     }
 }
 
+# An SQL error in searchLt() and searchGt() doesn't die: nothing is
+# returned and the error is printed on STDERR
+foreach my $m (qw(searchLt searchGt)) {
+    ( $ret, $err ) = quiet_err {
+        eval {
+            $class->$m( { %$args, TableName => 'no_such_table' },
+                '_utime', 150 );
+        };
+    };
+    is_deeply( $ret, {}, "$m: SQL error returns nothing" ) or diag $@;
+    like( $err, qr/^$m: .*no_such_table/m, "$m: SQL error printed on STDERR" );
+}
+
 done_testing();
 
 END {
