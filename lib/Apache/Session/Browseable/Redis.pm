@@ -395,6 +395,8 @@ sub _getRedis {
 1;
 __END__
 
+=encoding utf8
+
 =head1 NAME
 
 Apache::Session::Browseable::Redis - Add index and search methods to
