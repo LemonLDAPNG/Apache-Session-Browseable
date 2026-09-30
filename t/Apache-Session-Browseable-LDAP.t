@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 127;
+plan tests => 130;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -465,3 +465,14 @@ ok( $mock->{deletes}->[0]->[1]->critical, 'Assertion control is critical' );
 $mock = MockDeleteLDAP->new(12);
 ( $r, $mockErr ) = mockedDelete( $mock, { or => { _utime => 10 } }, 0 );
 is( $r, 0, 'deleteIfLowerThan: critical extension error, false in scalar' );
+
+# Error while reading a session without "not" index: nothing deleted
+$mock = MockDeleteLDAP->new(0);
+$mock->{searchCode} = 50;
+( $r, $mockErr ) = mockedDelete(
+    $mock,
+    { or => { _utime => 10 }, not => { _session_kind => 'Persistent' } }, 1
+);
+is_deeply( $r, [ 0, 0 ], '_notInContent search error: ( 0, 0 )' );
+is( scalar @{ $mock->{deletes} }, 0, '... nothing deleted' );
+like( $mockErr, qr/LDAP error 50: mock error/, '... and reported' );
