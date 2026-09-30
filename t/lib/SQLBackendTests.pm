@@ -485,8 +485,12 @@ sub run_tests {
             }
         );
         foreach (
-            [ value        => { _whatToTrace => "\x{c9}lodie" }, 'utf8' ],
-            [ 'field name' => { "cl\x{e9}"   => 'v' },           'deleteNot' ]
+            [ value => { _whatToTrace => "\x{c9}lodie" }, 'utf8' ],
+            [
+                'value (UTF-8 bytes)' => { _whatToTrace => "\xc3\x89lodie" },
+                'utf8'
+            ],
+            [ 'field name' => { "cl\x{e9}" => 'v' }, 'deleteNot' ]
           )
         {
             my ( $l, $not, $key ) = @$_;
@@ -670,7 +674,7 @@ sub run_tests {
 
                     # The optimizer may combine indexes (index_merge), so the
                     # expected ones must be included in key, not equal it
-                    my %used = map { $_ => 1 } split /,/, $row->{key} // '';
+                    my %used    = map  { $_ => 1 } split /,/, $row->{key} // '';
                     my @missing = grep { !$used{$_} } @indexes;
                     ok( !@missing && ( $row->{type} // '' ) ne 'ALL',
                         "$desc uses index $index" )
