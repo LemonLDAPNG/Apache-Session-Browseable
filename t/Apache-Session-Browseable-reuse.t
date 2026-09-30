@@ -150,9 +150,9 @@ tie %session, $class, $id, $args;
 is( refaddr( $dbhOf->( \%session ) ), refaddr($new), 'New handle reused' );
 untie %session;
 
-# 8. Each store keeps the attributes of its own connections. The upstream
-# stores only use SQL that SQLite understands, except "SELECT ... FOR UPDATE"
-# in materialize(), which provides a failure
+# 8. Each store keeps the attributes of its own connections. The second
+# column marks the stores whose materialize() fails here (the session was
+# rolled back, or the query isn't SQLite's), which provides a failure
 my %stores = (
     Postgres    => [ 0, 1 ],
     Oracle      => [ 0, 1 ],

@@ -166,8 +166,7 @@ sub run_tests {
         untie %s;
 
         # Without Commit, the transaction ends at untie: rolled back if
-        # AutoCommit is off, and the row locked by "SELECT ... FOR UPDATE"
-        # (PostgreSQL) is released
+        # AutoCommit is off, which releases the row locked by the write
         tie %s, $class, $rid, { %$rargs, Commit => 0 };
         my $autoCommit = $dbhOf->( \%s )->{AutoCommit};
         $s{mail} = 'rollback@badwolf.org';

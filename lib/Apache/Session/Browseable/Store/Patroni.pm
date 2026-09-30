@@ -47,6 +47,7 @@ sub connection {
           _buildDataSource( $originalDataSource, $cache->{leader} );
     }
 
+    # AutoCommit off, as Postgres: see "Why AutoCommit differs" in Store/DBI.pm
     my $reused;
     foreach ( 0 .. 1 ) {
         (
