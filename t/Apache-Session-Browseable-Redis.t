@@ -16,7 +16,7 @@ plan skip_all => "Redis error : $@"
     $r->flushdb();
   };
 
-plan tests => 67;
+plan tests => 69;
 
 $package = 'Apache::Session::Browseable::Redis';
 
@@ -261,6 +261,25 @@ ok( !exists $hash->{$id_empty},
     "Session without _utime purged by deleteIfLowerThan" );
 ok( !$r->sismember( "uid_ghost", $id_empty ),
     "Index cleaned for purged empty session" );
+
+# A session with a recent _utime but no _lastSeen is kept
+my %session_nols;
+tie %session_nols, $package, undef, $args;
+$session_nols{uid} = 'nolastseen';
+my $id_nols = $session_nols{_session_id};
+untie %session_nols;
+
+$package->deleteIfLowerThan( $args,
+    { or => { _utime => time - 3600, _lastSeen => time - 3600 } } );
+$hash = $package->get_key_from_all_sessions($args);
+ok( exists $hash->{$id_nols},
+    "Session with recent _utime and no _lastSeen kept by deleteIfLowerThan" );
+
+$package->deleteIfLowerThan( $args,
+    { and => { _utime => time + 3600, _lastSeen => time + 3600 } } );
+$hash = $package->get_key_from_all_sessions($args);
+ok( exists $hash->{$id_nols},
+    "Session missing a non-_utime field kept by 'and' rule" );
 
 # Test lazy cleanup of orphan index entries in searchOn/searchOnExpr
 $r->flushdb;
