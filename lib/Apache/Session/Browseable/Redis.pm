@@ -654,6 +654,14 @@ them:
 
 This also refreshes their C<TTL>, if any.
 
+=head1 CONCURRENT UPDATES
+
+Index sets are updated after the session is written, without a transaction.
+If the same session is updated concurrently by two processes, a stale member
+can remain in the index set of a previous value. Searches check the value of
+the session again, so the session isn't returned for a value it no longer
+has, but the stale member isn't removed while the session exists.
+
 =head1 SEE ALSO
 
 L<Apache::Session>
