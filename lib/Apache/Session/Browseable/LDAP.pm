@@ -412,8 +412,11 @@ sub _matchLowerThan {
     my $or = exists $rule->{or};
     my $lt = $rule->{ $or ? 'or' : 'and' };
     foreach my $f ( keys %$lt ) {
+
+        # Same parsing as searchLt(): surrounding spaces are ignored
         my @nums =
-          grep { /$numRe/ } map { /^\Q$f\E_(.*)\z/s ? $1 : () } @values;
+          grep { defined $class->_cmpNum( $_, $lt->{$f} ) }
+          map  { /^\Q$f\E_(.*)\z/s ? $1 : () } @values;
         my $low = @nums ? 1 : 0;
         foreach (@nums) {
             $low = 0 unless ( $class->_cmpNum( $_, $lt->{$f} ) < 0 );

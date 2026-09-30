@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 117;
+plan tests => 120;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -271,6 +271,9 @@ foreach (
     [ [qw(_utime_0999999999)],             1, 'leading zero' ],
     [ [qw(_utime_1790559999.5)],           1, 'decimal' ],
     [ [qw(_utime_abc)],                    0, 'not a number' ],
+    [ ['_utime_ 999 '],                    1, 'surrounding spaces' ],
+    [ ['_utime_ 1000 '],                   0, 'equal with spaces' ],
+    [ ['_utime_ abc '],                    0, 'not a number with spaces' ],
     [ [qw(uid_dwho)],                      0, 'no field' ],
     [ [qw(_utime_x_1 _utimex_1)],          0, 'other fields with same prefix' ],
     [ [qw(_utime_1790560000 _lastSeen_1)], 1, 'or: second field lower' ],

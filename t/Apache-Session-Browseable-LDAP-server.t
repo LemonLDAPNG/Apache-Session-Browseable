@@ -275,6 +275,7 @@ my %llng = (
     shorter    => { _session_kind => 'SSO',        _utime => 99 },
     longer     => { _session_kind => 'SSO',        _utime => 10000 },
     decimal    => { _session_kind => 'SSO',        _utime => '999.9' },
+    spaced     => { _session_kind => 'SSO',        _utime => ' 999 ' },
     persistent => { _session_kind => 'Persistent', _utime => 5 },
     nokind     => { _utime        => 5 },
     inactive   => { _session_kind => 'SSO', _utime => 1500, _lastSeen => 900 },
@@ -295,7 +296,7 @@ my @r;
         }
     );
 }
-is_deeply( \@r, [ 1, 6 ], 'deleteIfLowerThan (or + not): 6 deleted' );
+is_deeply( \@r, [ 1, 7 ], 'deleteIfLowerThan (or + not): 7 deleted' );
 is_deeply(
     remaining(),
     [qw(active equal longer nan noTime persistent)],
