@@ -169,6 +169,8 @@ __END__
 
 =pod
 
+=encoding utf8
+
 =head1 NAME
 
 Apache::Session::Browseable::Store::Redis - An implementation of
