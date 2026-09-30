@@ -378,6 +378,22 @@ foreach my $bad ( 'x', [ _utime => 200 ], \'x', undef ) {
 }
 is( remaining($ids), 'new', 'invalid rule: nothing deleted' );
 
+# 9. SQL failure (missing table): no die, false / (0, 0) and a message
+my $badArgs = { %$args, TableName => 'no_such_table' };
+$rule = { or => { _utime => 250 } };
+( $ret, $err ) = quiet_err {
+    my @r = eval { $class->deleteIfLowerThan( $badArgs, $rule ) };
+    $@ ? 'died' : join( ',', @r );
+};
+is( $ret, '0,0', 'SQL failure: returns (0, 0) in list context' ) or diag $@;
+like( $err, qr/deleteIfLowerThan: /, 'SQL failure: message on STDERR' );
+( $ret, $err ) = quiet_err {
+    my $r = eval { $class->deleteIfLowerThan( $badArgs, $rule ) };
+    $@ ? 'died' : ( $r ? 'true' : 'false' );
+};
+is( $ret, 'false', 'SQL failure: returns false in scalar context' );
+like( $err, qr/deleteIfLowerThan: /, 'SQL failure: message on STDERR' );
+
 done_testing();
 
 END {

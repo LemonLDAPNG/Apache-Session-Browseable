@@ -106,10 +106,16 @@ sub deleteIfLowerThan {
               keys %{ $rule->{not} }
         );
     }
-    my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
+    my $rows = eval {
+        my $dbh = $class->_classDbh($args);
+        $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
+    };
+    if ($@) {
+        print STDERR "deleteIfLowerThan: $@\n";
+        return wantarray ? ( 0, 0 ) : 0;
+    }
     return wantarray ? ( 0, 0 ) : 0 unless defined $rows;
 
     if (wantarray) {

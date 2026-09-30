@@ -163,6 +163,10 @@ Use it with Perl:
 Apache::Session::browseable provides some class methods to manipulate all
 sessions and add the capability to index some fields to make research faster.
 
+B<Note>: if you add a column to C<Index> on a table that already contains
+sessions, backfill it before relying on it (see "ADDING A COLUMN TO Index ON AN
+EXISTING TABLE" in L<Apache::Session::Browseable>).
+
 =head1 SEE ALSO
 
 L<Apache::Session>
