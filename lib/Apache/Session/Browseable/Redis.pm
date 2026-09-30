@@ -354,6 +354,12 @@ sessions and add the capability to index some fields to make research faster.
 
 This module use either L<Redis::Fast> or L<Redis>.
 
+Index sets are updated after the session is written, without a transaction.
+If the same session is updated concurrently by two processes, a stale member
+can remain in the index set of a previous value. C<searchOn> only removes
+members whose session no longer exists and doesn't check the indexed value
+again, so such a session may be returned for a value it no longer has.
+
 =head1 SEE ALSO
 
 L<Apache::Session>

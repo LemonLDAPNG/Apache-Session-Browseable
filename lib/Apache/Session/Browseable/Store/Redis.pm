@@ -54,7 +54,19 @@ sub update {
       ? $session->{args}->{Index}
       : [ split /\s+/, $session->{args}->{Index} ];
 
-    my $id = $session->{data}->{_session_id};
+    my $id  = $session->{data}->{_session_id};
+    my $ttl = $session->{args}->{TTL};
+
+    # Nothing to clean up without index
+    unless (@$index) {
+        if ($ttl) {
+            $self->{cache}->set( $id, $session->{serialized}, 'EX', $ttl );
+        }
+        else {
+            $self->{cache}->set( $id, $session->{serialized} );
+        }
+        return;
+    }
 
     # Read old data to clean up stale index entries
     my $old_raw = eval { $self->{cache}->get($id) };
@@ -75,7 +87,6 @@ sub update {
     }
 
     # Store new data
-    my $ttl = $session->{args}->{TTL};
     if ($ttl) {
         $self->{cache}->set( $id, $session->{serialized}, 'EX', $ttl );
     }
