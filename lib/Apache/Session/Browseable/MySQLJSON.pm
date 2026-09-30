@@ -232,6 +232,12 @@ use the C<utf8mb4_bin> collation: otherwise, searches on indexed fields follow
 the table collation (case and accent insensitive with C<utf8mb4_0900_ai_ci>,
 the default of MySQL 8) whereas searches on other fields don't.
 
+Exception: C<utf8mb4_bin> is a C<PAD SPACE> collation, so C<=> ignores
+trailing spaces: an indexed search for C<'dwho '> finds the sessions of
+C<dwho>, whereas a search on a non indexed field (done by Perl) doesn't. To
+avoid it, use a C<NO PAD> collation: C<utf8mb4_0900_bin> on MySQL E<gt>=
+8.0.17 (C<utf8mb4_nopad_bin> on MariaDB).
+
 C<as_ls> is needed when Lemonldap::NG "timeoutActivity" is used: sessions purge
 then deletes sessions whose C<_utime> B<or> C<_lastSeen> is too old, and an
 C<OR> with a non indexed side forces a full table scan (with both keys, MySQL

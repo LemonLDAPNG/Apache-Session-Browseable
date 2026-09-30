@@ -77,6 +77,13 @@ fields follow the table collation (case and accent insensitive with
 C<utf8mb4_0900_ai_ci>, the default of MySQL 8) whereas searches on other fields
 are done by Perl and are always exact. Without C<utf8mb4_bin>,
 C<searchOn($args, '_whatToTrace', 'DWHO')> would find the session of C<dwho>.
+
+Exception: C<utf8mb4_bin> is a C<PAD SPACE> collation, so C<=> ignores
+trailing spaces: an indexed search for C<'dwho '> finds the sessions of
+C<dwho>, whereas a search on a non indexed field (done by Perl) doesn't. To
+avoid it, use a C<NO PAD> collation: C<utf8mb4_0900_bin> on MySQL E<gt>=
+8.0.17 (C<utf8mb4_nopad_bin> on MariaDB).
+
 To fix an existing table:
 
   ALTER TABLE sessions
