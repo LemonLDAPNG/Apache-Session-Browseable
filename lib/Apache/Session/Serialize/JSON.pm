@@ -89,6 +89,10 @@ UTF-8: for example "Ã©" becomes "é". This needs every non-ASCII character of
 the session to be part of such a sequence, that is bytes C2-DF followed by
 80-BF, or a valid UTF-8 sequence formed over the whole session (mostly values
 that are already mojibake).
+How strictly "valid UTF-8" is checked depends on the JSON backend: JSON::XS
+accepts surrogates, code points above U+10FFFF and 5-byte sequences, unlike
+JSON::PP and Cpanel::JSON::XS. The rare Latin-1 byte strings misread as UTF-8
+therefore vary slightly between backends.
 
 File and Redis are not affected: Redis stores Latin-1 but reads it with
 C<unserializeLatin1()>, which skips the UTF-8 decode, and
