@@ -487,9 +487,13 @@ C</^-?[0-9]+(?:\.[0-9]+)?\z/>. Otherwise, an error is
 printed on STDERR and an empty hash is returned.
 
 Sessions where the field is missing, empty or not a number (same check as the
-value, so C<Inf> or C<1e3> are skipped) are never returned. Note that the Perl
-fallback of Lemonldap::NG, used with backends that don't provide these
-methods, compares a missing field as 0.
+value, so C<Inf> or C<1e3> are skipped) are never returned. This differs from
+the SQL backends, which compare a non-numeric value as 0 (and cast its numeric
+prefix: C<250x> is 250), so C<searchLt($args, 'f', 10)> returns a session
+where C<f> is C<abc> with them, but not with Redis. Numbers must be written
+in plain decimal form to be found. Likewise, the Perl fallback of
+Lemonldap::NG, used with backends that don't provide these methods, compares
+a missing field as 0.
 
 If the field isn't listed in C<Index>, all sessions are read and decoded. If
 it is, Redis still walks the whole keyspace (C<SCAN ... MATCH field_*>), but
