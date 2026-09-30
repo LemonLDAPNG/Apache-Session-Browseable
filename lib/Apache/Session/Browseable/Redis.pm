@@ -52,15 +52,17 @@ sub _mget {
 }
 
 # Sessions of index set $set, except those in %$skip: { id => session }.
-# Members that may belong to another app are neither read nor removed
+# Members that may belong to another app are neither read nor removed.
+# A key of the wrong type or a corrupted session is skipped. Any other Redis
+# error (timeout, LOADING, disconnection...) is fatal if $strict (searchOn:
+# an empty result would be taken for "no session"), else it's reported and the
+# set is ignored (purge)
 sub _readIndex {
-    my ( $class, $args, $redisObj, $set, $skip ) = @_;
+    my ( $class, $args, $redisObj, $set, $skip, $strict ) = @_;
     my @keys = eval { $redisObj->smembers($set) };
-
-    # Like the MGET below: a transient error (MOVED, LOADING, timeout...)
-    # must not break the whole search, and must not lose any data
     if ($@) {
         return {} if ( $@ =~ /WRONGTYPE/ );
+        die $@ if ($strict);
         print STDERR "Error when reading index $set: $@\n";
         return {};
     }
@@ -74,6 +76,7 @@ sub _readIndex {
     # MGET returns undef for missing keys and keys that aren't strings
     my @values = eval { _mget( $redisObj, @keys ) };
     if ($@) {
+        die $@ if ($strict);
         print STDERR "Error when reading index $set: $@\n";
         return {};
     }
@@ -123,7 +126,8 @@ sub searchOn {
 
         my $redisObj = $class->_getRedis($args);
         my $sessions =
-          $class->_readIndex( $args, $redisObj, "${selectField}_$value" );
+          $class->_readIndex( $args, $redisObj, "${selectField}_$value", undef,
+            1 );
         $class->_keepMatching( \%res, $sessions, $selectField,
             sub { $_[0] eq $value }, @fields );
     }
@@ -161,7 +165,7 @@ sub searchOnExpr {
               $redisObj->scan( $cursor, MATCH => "${selectField}_$value" );
             foreach my $set (@$sets) {
                 my $sessions =
-                  $class->_readIndex( $args, $redisObj, $set, \%res );
+                  $class->_readIndex( $args, $redisObj, $set, \%res, 1 );
                 $class->_keepMatching( \%res, $sessions, $selectField,
                     sub { $_[0] =~ $re }, @fields );
             }
