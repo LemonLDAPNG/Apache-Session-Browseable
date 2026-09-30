@@ -152,6 +152,10 @@ sessions and add the capability to index some fields to make research faster.
 
 Apache::Session::Browseable::Postgres implements it for PosqtgreSQL databases.
 
+B<Note>: if you add a column to C<Index> on a table that already contains
+sessions, backfill it before relying on it (see "ADDING A COLUMN TO Index ON AN
+EXISTING TABLE" in L<Apache::Session::Browseable>).
+
 =head1 SEE ALSO
 
 L<http://lemonldap-ng.org>, L<Apache::Session::Postgres>
