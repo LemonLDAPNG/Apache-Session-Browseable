@@ -106,7 +106,8 @@ foreach (@tests) {
 
         # Values are checked before being inserted in queries
         @queries = ();
-        foreach my $bad ( "$t OR 1=1", '1e3', '', ' ', undef ) {
+        foreach my $bad ( "$t OR 1=1", '1e3', '', ' ', undef,
+            '1' x 21, '1.' . '1' x 21, '9' x 400 ) {
             local *STDERR;
             open STDERR, '>', \my $err;
             is_deeply( $class->searchLt( $args, '_oidcRtUpdate', $bad ),

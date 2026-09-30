@@ -172,7 +172,7 @@ $ids = reset_sessions(
     a => { _utime => 100, _session_kind => 'SSO' },
     b => { _utime => 100, _session_kind => 'Persistent' },
 );
-foreach my $bad ( '100 OR 1=1', '1e3', '', undef ) {
+foreach my $bad ( '100 OR 1=1', '1e3', '', undef, '1' x 21, '9' x 400 ) {
     is(
         quiet {
             eval {
@@ -270,7 +270,7 @@ foreach my $f (qw(_utime n)) {
         "searchGt $f with fields: requested fields"
     );
 }
-foreach my $bad ( '100 OR 1=1', '1e3', '', undef, 'abc' ) {
+foreach my $bad ( '100 OR 1=1', '1e3', '', undef, 'abc', '1' x 21, '9' x 400 ) {
     foreach my $m (qw(searchLt searchGt)) {
         $res = quiet { $class->$m( $args, '_utime', $bad ) };
         is_deeply( $res, {},

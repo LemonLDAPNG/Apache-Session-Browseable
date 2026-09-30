@@ -29,9 +29,11 @@ sub _fieldIsIndexed {
     return ( grep { $_ eq $field } @$index );
 }
 
+# Digits are bounded: MySQL and Oracle reject out-of-range literals
 sub _isNumber {
     my ( $class, $value ) = @_;
-    return ( defined($value) and $value =~ /^-?[0-9]+(?:\.[0-9]+)?\z/ );
+    return ( defined($value)
+          and $value =~ /^-?[0-9]{1,20}(?:\.[0-9]{1,20})?\z/ );
 }
 
 # The operator of a comparison is inserted into SQL queries
