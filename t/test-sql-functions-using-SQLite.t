@@ -267,7 +267,75 @@ quiet {
 };
 is_deeply( $qargs->{Index}, [ 'uid', "a'b" ], 'Store: Index not modified' );
 
-# 10. empty or invalid "not" in the rule
+# 10. get_key_from_all_sessions reads sessions by batches
+{
+    no warnings 'once';
+    local $Apache::Session::Browseable::_common::BatchSize = 2;
+    my $queries = 0;
+    my $cdbh    = $class->_classDbh($args);
+    local $cdbh->{Callbacks} =
+      { ChildCallbacks => { execute => sub { $queries++; return } } };
+    foreach my $n ( 4, 5 ) {
+        $ids = reset_sessions( map { ( "s$_" => { uid => "u$_" } ) } 1 .. $n );
+        $queries = 0;
+        my $calls = 0;
+        $res = $class->get_key_from_all_sessions( $args,
+            sub { $calls++; $_[0]->{uid} } );
+        is( $calls, $n, "$n sessions by batches: callback called for each" );
+        is_deeply(
+            $res,
+            { map { ( $ids->{"s$_"} => "u$_" ) } 1 .. $n },
+            "$n sessions by batches: all sessions returned"
+        );
+        is( $queries, 3, "$n sessions by batches: 3 queries" );
+        $res = $class->get_key_from_all_sessions($args);
+        is(
+            join( ',', sort map { $_->{uid} } values %$res ),
+            join( ',', map { "u$_" } 1 .. $n ),
+            "$n sessions by batches: all sessions returned without callback"
+        );
+    }
+}
+
+# 11. Invalid batch sizes fall back to the default one
+{
+    no warnings 'once';
+    $ids = reset_sessions( map { ( "s$_" => { uid => "u$_" } ) } 1 .. 3 );
+    foreach my $size ( 0, -1, 'abc', undef, 1_000_001, '9' x 26 ) {
+        local $Apache::Session::Browseable::_common::BatchSize = $size;
+        my $name = defined $size ? "'$size'" : 'undef';
+        $res = eval {
+            local $SIG{ALRM} = sub { die "timeout\n" };
+            alarm 10;
+            my $r = $class->get_key_from_all_sessions($args);
+            alarm 0;
+            $r;
+        };
+        alarm 0;
+        is( $@, '', "BatchSize $name: terminates" );
+        is( join( ',', sort map { $_->{uid} } values %{ $res || {} } ),
+            'u1,u2,u3', "BatchSize $name: all sessions returned" );
+    }
+}
+
+# 12. Subclass without its own populate()
+{
+
+    package My::SQLiteSubclass;
+    our @ISA = ('Apache::Session::Browseable::SQLite');
+}
+$res = eval { My::SQLiteSubclass->get_key_from_all_sessions($args) };
+is( $@, '', 'Subclass without populate: no error' );
+is( join( ',', sort map { $_->{uid} } values %{ $res || {} } ),
+    'u1,u2,u3', 'Subclass without populate: all sessions returned' );
+$res = eval {
+    My::SQLiteSubclass->get_key_from_all_sessions( $args,
+        sub { $_[0]->{uid} } );
+};
+is( join( ',', sort values %{ $res || {} } ),
+    'u1,u2,u3', 'Subclass without populate: callback called' );
+
+# 13. empty or invalid "not" in the rule
 $ids = reset_sessions(
     old => { _utime => 100, _session_kind => 'SSO' },
     new => { _utime => 300, _session_kind => 'SSO' },

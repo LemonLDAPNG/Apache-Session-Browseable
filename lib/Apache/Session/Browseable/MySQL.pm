@@ -25,10 +25,11 @@ sub populate {
     return $self;
 }
 
-# Override default CAST syntax from DBI.pm
+# No CAST (default in DBI.pm): MySQL converts values implicitly and a CAST
+# prevents the use of an index on the field
 sub _buildLowerThanExpression {
     my ( $class, $field, $value ) = @_;
-    return "CAST($field AS SIGNED INTEGER) < $value";
+    return "$field < $value";
 }
 
 1;
@@ -46,10 +47,11 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
   CREATE TABLE sessions (
       id varchar(64) not null primary key,
       a_session text,
-      _whatToTrace text,
-      _session_kind text,
+      _whatToTrace varchar(255) COLLATE utf8mb4_bin,
+      _session_kind varchar(32) COLLATE utf8mb4_bin,
       _utime bigint,
-      ipAddr text
+      _lastSeen bigint,
+      ipAddr varchar(64) COLLATE utf8mb4_bin
   );
 
 Add indexes:
@@ -57,7 +59,51 @@ Add indexes:
   CREATE INDEX uid1 ON sessions (_whatToTrace) USING BTREE;
   CREATE INDEX s1   ON sessions (_session_kind);
   CREATE INDEX u1   ON sessions (_utime);
+  CREATE INDEX ls1  ON sessions (_lastSeen);
   CREATE INDEX ip1  ON sessions (ipAddr) USING BTREE;
+
+Indexed columns can't be C<text>: MySQL can't index them without a prefix
+length. C<_utime> must be numeric (C<bigint>) so that deleteIfLowerThan() can
+use its index.
+
+C<_lastSeen> column and index are needed when Lemonldap::NG "timeoutActivity"
+is used: sessions purge then calls deleteIfLowerThan() on C<_utime> and
+C<_lastSeen>, which does nothing unless both fields are in C<Index> (purge
+then falls back to reading all sessions).
+
+To add C<_lastSeen> to an existing table, do it B<before> adding the field to
+C<Index>: the module writes every C<Index> column, so a missing column makes
+every session write fail. First create the column and its index:
+
+  ALTER TABLE sessions ADD COLUMN _lastSeen bigint;
+  CREATE INDEX ls1 ON sessions (_lastSeen);
+
+then backfill it (see L<Apache::Session::Browseable/"ADDING A COLUMN TO Index ON AN EXISTING TABLE">)
+and only then add C<_lastSeen> to C<Index>.
+
+Searches must be exact (case and accent sensitive). Text columns listed in
+C<Index> must use the C<utf8mb4_bin> collation: otherwise, searches on indexed
+fields follow the table collation (case and accent insensitive with
+C<utf8mb4_0900_ai_ci>, the default of MySQL 8) whereas searches on other fields
+are done by Perl and are always exact. Without C<utf8mb4_bin>,
+C<searchOn($args, '_whatToTrace', 'DWHO')> would find the session of C<dwho>.
+
+Exception: C<utf8mb4_bin> is a C<PAD SPACE> collation, so C<=> ignores
+trailing spaces: an indexed search for C<'dwho '> finds the sessions of
+C<dwho>, whereas a search on a non indexed field (done by Perl) doesn't. To
+avoid it, use a C<NO PAD> collation: C<utf8mb4_0900_bin> on MySQL E<gt>=
+8.0.17 (C<utf8mb4_nopad_bin> on MariaDB).
+
+To fix an existing table:
+
+  ALTER TABLE sessions
+      MODIFY _whatToTrace varchar(255) COLLATE utf8mb4_bin,
+      MODIFY _session_kind varchar(32) COLLATE utf8mb4_bin,
+      MODIFY ipAddr varchar(64) COLLATE utf8mb4_bin;
+
+With strict SQL mode (default since MySQL 5.7), storing a value longer than
+its column fails, so the whole session can't be saved: size C<varchar>
+columns generously.
 
 Use it with Perl:
 
@@ -72,7 +118,7 @@ Use it with Perl:
        LockPassword   => $db_pass,
 
        # Choose your browseable fileds
-       Index          => 'uid mail',
+       Index          => '_whatToTrace _session_kind _utime _lastSeen ipAddr',
   };
   
   # Use it like Apache::Session

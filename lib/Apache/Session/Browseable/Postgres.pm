@@ -66,6 +66,13 @@ sub get_key_from_all_sessions {
     return $res;
 }
 
+# Cast to bigint instead of integer: PostgreSQL drops this cast on a bigint
+# column, so its index can be used
+sub _buildLowerThanExpression {
+    my ( $class, $field, $value ) = @_;
+    return "cast($field as bigint) < $value";
+}
+
 1;
 __END__
 
@@ -84,15 +91,41 @@ Create table with columns for indexed fields. Example for Lemonldap::NG:
       _whatToTrace text,
       _session_kind text,
       _utime bigint,
+      _lastSeen bigint,
       ipAddr varchar(64)
   );
 
 Add indexes:
 
-  CREATE INDEX uid1 ON sessions USING BTREE (_whatToTrace);
+  CREATE INDEX uid1 ON sessions USING BTREE (_whatToTrace text_pattern_ops);
   CREATE INDEX s1   ON sessions (_session_kind);
   CREATE INDEX u1   ON sessions (_utime);
-  CREATE INDEX ip1  ON sessions USING BTREE (ipAddr);
+  CREATE INDEX ls1  ON sessions (_lastSeen);
+  CREATE INDEX ip1  ON sessions USING BTREE (ipAddr varchar_pattern_ops);
+
+searchOnExpr() uses C<LIKE 'prefix%'> queries: unless the database uses the
+"C" collation, PostgreSQL can't use a plain btree index for them. The
+C<text_pattern_ops> and C<varchar_pattern_ops> operator classes let the same
+index serve both C<=> and prefix C<LIKE> searches. Note that a search starting
+with a C<*> wildcard can never use a btree index.
+
+C<_utime> must be a C<bigint> column, else deleteIfLowerThan() can't use its
+index.
+
+C<_lastSeen> column and index are needed when Lemonldap::NG "timeoutActivity"
+is used: sessions purge then calls deleteIfLowerThan() on C<_utime> and
+C<_lastSeen>, which does nothing unless both fields are in C<Index> (purge
+then falls back to reading all sessions).
+
+To add C<_lastSeen> to an existing table, do it B<before> adding the field to
+C<Index>: the module writes every C<Index> column, so a missing column makes
+every session write fail. First create the column and its index:
+
+  ALTER TABLE sessions ADD COLUMN _lastSeen bigint;
+  CREATE INDEX ls1 ON sessions (_lastSeen);
+
+then backfill it (see L<Apache::Session::Browseable/"ADDING A COLUMN TO Index ON AN EXISTING TABLE">)
+and only then add C<_lastSeen> to C<Index>.
 
 Use it with Perl:
 
@@ -105,7 +138,7 @@ Use it with Perl:
        Commit     => 1,
 
        # Choose your browseable fileds
-       Index      => '_whatToTrace _session_kind _utime iAddr',
+       Index      => '_whatToTrace _session_kind _utime _lastSeen ipAddr',
   };
   
   # Use it like Apache::Session

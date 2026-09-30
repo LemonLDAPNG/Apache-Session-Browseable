@@ -11,8 +11,15 @@ package SQLBackendTests;
 #  - json:    1 if any field can be queried (JSON/Hstore backends)
 #  - weird:   field names that need quoting (JSON/Hstore backends)
 #  - null:    1 if a field can be stored as JSON null (JSON backends)
+#  - exact:   1 to check that searches are case and accent sensitive
 #  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - corrupt: a_session value that can't be unserialized
+#  - explain: sub( $class, $dbh ) returning a list of
+#             [ description, WHERE clause, index or array ref of indexes ]:
+#             the plan of each WHERE clause must use all these indexes
+#
+# ASB_TEST_TABLE_PREFIX environment variable replaces the "asb_test_" prefix
+# of table names.
 
 use strict;
 use warnings;
@@ -25,6 +32,8 @@ sub run_tests {
     my %o = @_;
     my ( $class, $table ) = @o{qw(class table)};
     my $dsn = $ENV{"$o{env}_DSN"};
+    $table =~ s/^asb_test_/$ENV{ASB_TEST_TABLE_PREFIX}/
+      if $ENV{ASB_TEST_TABLE_PREFIX};
 
     plan skip_all => "DBD::$o{driver} is needed for this test"
       unless eval "require DBI; require DBD::$o{driver}; 1";
@@ -173,6 +182,35 @@ sub run_tests {
         'searchOnExpr with fields'
     );
 
+    # Case and accent sensitive searches, on indexed and non indexed fields
+    if ( $o{exact} ) {
+        # Character string: DBD::mysql sends other strings in Latin-1, which
+        # an utf8mb4 column rejects
+        my $elodie = "\x{c9}lodie";
+        utf8::upgrade($elodie);
+        my $uid = $newSession->(
+            %{ $data{dwho} },
+            uid          => $elodie,
+            _whatToTrace => $elodie,
+        );
+        foreach my $f (qw(_whatToTrace uid)) {
+            $res = $class->searchOn( $args, $f, 'DWHO' );
+            is_deeply( $res, {}, "searchOn on $f is case sensitive" );
+            $res = $class->searchOnExpr( $args, $f, 'DW*' );
+            is_deeply( $res, {}, "searchOnExpr on $f is case sensitive" );
+            foreach my $v (qw(elodie ELODIE)) {
+                $res = $class->searchOn( $args, $f, $v );
+                is_deeply( $res, {}, "searchOn on $f: $v doesn't match" );
+                $res = $class->searchOnExpr( $args, $f, "$v*" );
+                is_deeply( $res, {}, "searchOnExpr on $f: $v* doesn't match" );
+            }
+
+            $res = $class->searchOn( $args, $f, $elodie );
+            is( $name->($res), $uid, "searchOn on $f: exact value found" );
+        }
+        $dbh->do( "DELETE FROM $table WHERE id=?", undef, $uid );
+    }
+
     # get_key_from_all_sessions
     $res = $class->get_key_from_all_sessions($args);
     is( $name->($res), 'dwho,nokind,obrien,rtyler',
@@ -216,6 +254,30 @@ sub run_tests {
         { $ids->{dwho} => 'dwho@badwolf.org' },
         'get_key_from_all_sessions with a code ref'
     );
+
+    # get_key_from_all_sessions reads sessions by batches
+    {
+        local $Apache::Session::Browseable::_common::BatchSize = 2;
+        my $queries = 0;
+        my $cdbh    = $class->_classDbh($args);
+        local $cdbh->{Callbacks} =
+          { ChildCallbacks => { execute => sub { $queries++; return } } };
+        foreach my $n ( 4, 5 ) {
+            $newSession->( uid => 'extra' ) if ( $n == 5 );
+            $queries = 0;
+            my $calls = 0;
+            $res = $class->get_key_from_all_sessions( $args,
+                sub { $calls++; $_[1] } );
+            is( $calls, $n,
+                "$n sessions by batches: callback called for each" );
+            is( scalar( keys %$res ),
+                $n, "$n sessions by batches: all returned" );
+            is( $queries, 3, "$n sessions by batches: 3 queries" );
+        }
+        $res = $class->get_key_from_all_sessions($args);
+        is( scalar( keys %$res ), 5, 'Sessions by batches without callback' );
+        $reset->();
+    }
 
     # Fields needing quotes
     foreach my $w (@weird) {
@@ -433,6 +495,44 @@ sub run_tests {
         $mdbh->do('SET standard_conforming_strings = on');
         is( $mdbh->selectrow_array('SHOW standard_conforming_strings'),
             'on', 'standard_conforming_strings is back on' );
+    }
+
+    # Queries must be able to use indexes
+    if ( $o{explain} ) {
+        $reset->();
+        $dbh->do('SET enable_seqscan = off') if ( $o{driver} eq 'Pg' );
+
+        # MySQL >= 8.3: JSON and TREE formats have no possible_keys column
+        eval { $dbh->do('SET SESSION explain_format=TRADITIONAL') }
+          if ( $o{driver} eq 'mysql' );
+        foreach ( $o{explain}->( $class, $dbh ) ) {
+            my ( $desc, $where, $indexes ) = @$_;
+            my @indexes =
+              map { ( my $i = $_ ) =~ s/__TABLE__/$table/g; $i }
+              ref($indexes) ? @$indexes : ($indexes);
+            my $index = join ',', @indexes;
+            my $sth =
+              $dbh->prepare("EXPLAIN SELECT id FROM $table WHERE $where");
+            $sth->execute;
+            if ( $o{driver} eq 'Pg' ) {
+                my $plan = join "\n",
+                  map { $_->[0] } @{ $sth->fetchall_arrayref };
+                my @missing = grep { $plan !~ /\b\Q$_\E\b/ } @indexes;
+                ok( !@missing && $plan =~ /Index Cond/,
+                    "$desc uses index $index" )
+                  or diag "$where:\n$plan";
+            }
+            else {
+                my $row     = $sth->fetchrow_hashref('NAME_lc');
+                my $keys    = $row->{possible_keys} // '';
+                my %keys    = map  { $_ => 1 } split /,/, $keys;
+                my @missing = grep { !$keys{$_} } @indexes;
+                ok( !@missing, "$desc can use index $index" )
+                  or diag "$where: possible_keys=$keys";
+                $sth->finish;
+            }
+        }
+        $dbh->do('RESET enable_seqscan') if ( $o{driver} eq 'Pg' );
     }
 
     # Corrupted session must not break listing
