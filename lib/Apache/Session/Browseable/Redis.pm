@@ -87,52 +87,113 @@ sub _mget {
     return @res;
 }
 
-# Sessions of index set $set, except those in %$skip: { id => session }.
+# Index sets read together: their members are pipelined, then fetched with
+# one series of MGET, so that a SCAN page costs a few round trips instead of
+# two per set
+our $SETS_BATCH = 100;
+
+# Members of index sets @$sets: { set => [ keys ] }. A set of the wrong type is
+# ignored; other Redis errors are raised
+sub _smembers {
+    my ( $redisObj, $sets ) = @_;
+    my %res;
+    if ( @$sets == 1 ) {
+        my @keys = eval { $redisObj->smembers( $sets->[0] ) };
+        die $@ if ( $@ and $@ !~ /WRONGTYPE/ );
+        $res{ $sets->[0] } = \@keys unless ($@);
+        return \%res;
+    }
+    my $fatal;
+    foreach my $set (@$sets) {
+        $redisObj->smembers(
+            $set,
+            sub {
+                my ( $reply, $err ) = @_;
+                if ($err) {
+                    $fatal //= $err unless ( $err =~ /WRONGTYPE/ );
+                }
+                else {
+                    $res{$set} = $reply;
+                }
+            }
+        );
+    }
+    $redisObj->wait_all_responses;
+    die $fatal if ($fatal);
+    return \%res;
+}
+
+# Reads the sessions of index sets @$sets and calls $cb->( $set, $sessions )
+# for each one ($sessions: { id => session }, without those in %$skip).
 # Members that may belong to another app are neither read nor removed.
 # A key of the wrong type or a corrupted session is skipped. Any other Redis
 # error (timeout, LOADING, disconnection...) is fatal if $strict (searchOn:
-# an empty result would be taken for "no session"), else it's reported and the
-# set is ignored (purge)
+# an empty result would be taken for "no session"), else it's reported and
+# the sets are ignored (purge)
+sub _readSets {
+    my ( $class, $args, $redisObj, $sets, $skip, $strict, $cb ) = @_;
+    my @sets = @$sets;
+    while (@sets) {
+        my @chunk = splice( @sets, 0, $SETS_BATCH );
+        my ( $members, %values );
+        my $ok = eval {
+            $members = _smembers( $redisObj, \@chunk );
+            foreach my $set ( keys %$members ) {
+                $members->{$set} = [
+                    grep {
+                              $_
+                          and !( $skip and exists $skip->{$_} )
+                          and $class->isLlngKey( $args, $_ )
+                    } @{ $members->{$set} }
+                ];
+            }
+
+            # MGET returns undef for missing keys and keys that aren't
+            # strings
+            my %seen;
+            my @keys = grep { !$seen{$_}++ } map { @$_ } values %$members;
+            my @values = _mget( $redisObj, @keys );
+            @values{@keys} = @values;
+            1;
+        };
+        unless ($ok) {
+            die $@ if ($strict);
+            print STDERR "Error when reading index @chunk: $@\n";
+            next;
+        }
+        my %decoded;
+        foreach my $set (@chunk) {
+            my %res;
+            foreach my $k ( @{ $members->{$set} || [] } ) {
+                my $tmp = $values{$k};
+                unless ($tmp) {
+
+                    # Lazy cleanup: remove orphan from index
+                    $class->_removeOrphan( $redisObj, $set, $k );
+                    next;
+                }
+                unless ( exists $decoded{$k} ) {
+                    $decoded{$k} = eval { unserialize($tmp) };
+                    if ( $@ or ref( $decoded{$k} ) ne 'HASH' ) {
+                        print STDERR "Error in session $k: "
+                          . ( $@ || "not a session\n" );
+                        $decoded{$k} = undef;
+                    }
+                }
+                $res{$k} = $decoded{$k} if ( $decoded{$k} );
+            }
+            $cb->( $set, \%res );
+        }
+    }
+}
+
+# Sessions of index set $set: { id => session }, see _readSets()
 sub _readIndex {
     my ( $class, $args, $redisObj, $set, $skip, $strict ) = @_;
-    my @keys = eval { $redisObj->smembers($set) };
-    if ($@) {
-        return {} if ( $@ =~ /WRONGTYPE/ );
-        die $@ if ($strict);
-        print STDERR "Error when reading index $set: $@\n";
-        return {};
-    }
-    @keys = grep {
-              $_
-          and !( $skip and exists $skip->{$_} )
-          and $class->isLlngKey( $args, $_ )
-    } @keys;
-    return {} unless (@keys);
-
-    # MGET returns undef for missing keys and keys that aren't strings
-    my @values = eval { _mget( $redisObj, @keys ) };
-    if ($@) {
-        die $@ if ($strict);
-        print STDERR "Error when reading index $set: $@\n";
-        return {};
-    }
-    my %res;
-    foreach my $i ( 0 .. $#keys ) {
-        my ( $k, $tmp ) = ( $keys[$i], $values[$i] );
-        unless ($tmp) {
-
-            # Lazy cleanup: remove orphan from index
-            $class->_removeOrphan( $redisObj, $set, $k );
-            next;
-        }
-        $tmp = eval { unserialize($tmp) };
-        if ( $@ or ref($tmp) ne 'HASH' ) {
-            print STDERR "Error in session $k: " . ( $@ || "not a session\n" );
-            next;
-        }
-        $res{$k} = $tmp;
-    }
-    return \%res;
+    my $res = {};
+    $class->_readSets( $args, $redisObj, [$set], $skip, $strict,
+        sub { $res = $_[1] } );
+    return $res;
 }
 
 # searchOnExpr() patterns: '*' is a wildcard
@@ -216,12 +277,13 @@ sub searchOnExpr {
               $redisObj->scan( $cursor,
                 MATCH => _exprPattern( $selectField, $value ),
                 COUNT => $SCAN_COUNT );
-            foreach my $set (@$sets) {
-                my $sessions =
-                  $class->_readIndex( $args, $redisObj, $set, \%res, 1 );
-                $class->_keepMatching( \%res, $sessions, $selectField,
-                    sub { $_[0] =~ $re }, @fields );
-            }
+            $class->_readSets(
+                $args, $redisObj, $sets, \%res, 1,
+                sub {
+                    $class->_keepMatching( \%res, $_[1], $selectField,
+                        sub { $_[0] =~ $re }, @fields );
+                }
+            );
             $cursor = $new_cursor;
         } while ( $cursor != 0 );
     }
@@ -292,21 +354,24 @@ sub _searchCompare {
 
     my $redisObj = $class->_getRedis($args);
     my $prefix   = "${selectField}_";
-    my $pattern  = _globEscape($prefix);
+    my $pattern = _globEscape($prefix);
     my $cursor = 0;
     do {
         my ( $new_cursor, $sets ) =
           $redisObj->scan( $cursor, MATCH => "$pattern*", COUNT => $SCAN_COUNT );
-        foreach my $set (@$sets) {
 
-            # Sets of other fields ("${selectField}_x_1") aren't numbers
-            next unless ( $test->( substr( $set, length($prefix) ) ) );
-            my $sessions = $class->_readIndex( $args, $redisObj, $set, \%res );
+        # Sets of other fields ("${selectField}_x_1") aren't numbers
+        my @sets =
+          grep { $test->( substr( $_, length($prefix) ) ) } @$sets;
+        $class->_readSets(
+            $args, $redisObj, \@sets, \%res, 0,
+            sub {
 
-            # The index may be stale: check the session itself
-            $class->_keepMatching( \%res, $sessions, $selectField, $test,
-                @fields );
-        }
+                # The index may be stale: check the session itself
+                $class->_keepMatching( \%res, $_[1], $selectField, $test,
+                    @fields );
+            }
+        );
         $cursor = $new_cursor;
     } while ( $cursor != 0 );
     return \%res;

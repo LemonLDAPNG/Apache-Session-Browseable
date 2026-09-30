@@ -86,4 +86,55 @@ is( $class->can('_globEscape')->('a*b'), 'a\\*b', '_globEscape' );
     is_deeply( $res, {}, 'searchLt ignores Redis error' );
 }
 
+# Pipelined reads: SMEMBERS of several sets, one MGET
+{
+
+    package FakePipe;
+    our ( @log, %sets, %vals, $fail );
+    sub new { bless { cbs => [] }, shift }
+    sub smembers {
+        my ( $self, $set, $cb ) = @_;
+        push @log, "smembers $set";
+        push @{ $self->{cbs} }, sub {
+            $fail ? $cb->( undef, $fail ) : exists $sets{$set}
+              ? $cb->( $sets{$set} )
+              : $cb->( undef, 'WRONGTYPE bad' );
+        };
+    }
+    sub wait_all_responses { $_->() foreach @{ $_[0]->{cbs} }; $_[0]->{cbs} = [] }
+    sub mget { shift; push @log, 'mget ' . scalar(@_); map { $vals{$_} } @_ }
+    sub eval { push @log, 'eval'; 1 }
+}
+{
+    my ( $a1, $b1 ) = ( 'a' x 32, 'b' x 32 );
+    %FakePipe::sets = ( s1 => [ $a1, $b1, 'foreign' ], s2 => [$a1], s4 => [$b1] );
+    %FakePipe::vals = (
+        $a1 => '{"uid":"x","_session_id":"' . $a1 . '"}',
+        $b1 => undef,
+    );
+    my $r = FakePipe->new;
+    my %got;
+    $class->_readSets( {}, $r, [qw(s1 s2 s3)], undef, 1,
+        sub { $got{ $_[0] } = [ sort keys %{ $_[1] } ] } );
+    is_deeply( \%got, { s1 => [$a1], s2 => [$a1], s3 => [] },
+        'pipeline: sessions per set' );
+    is_deeply(
+        [ grep { !/^eval/ } @FakePipe::log ],
+        [ 'smembers s1', 'smembers s2', 'smembers s3', 'mget 2' ],
+        'pipeline: one MGET for all sets'
+    );
+    is( scalar( grep { /^eval/ } @FakePipe::log ), 1, 'orphan removed' );
+    $FakePipe::fail = 'ERR timeout';
+    ok( !eval { $class->_readSets( {}, $r, [qw(s1 s2)], undef, 1, sub { } ); 1 },
+        'pipeline: Redis error is fatal if strict' );
+    my $err = '';
+    {
+        local *STDERR;
+        open STDERR, '>', \$err;
+        $class->_readSets( {}, $r, [qw(s1 s2)], undef, 0, sub { $got{x}++ } );
+    }
+    like( $err, qr/timeout/, 'pipeline: Redis error reported if not strict' );
+    ok( !$got{x}, 'pipeline: sets ignored' );
+}
+
 done_testing();
