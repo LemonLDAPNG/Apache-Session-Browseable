@@ -70,6 +70,38 @@ manage connection using Patroni API to find master node of PostgreSQL cluster
 
 =back
 
+=head1 ADDING A COLUMN TO Index ON AN EXISTING TABLE
+
+With the backends that store indexed fields in dedicated columns (Postgres,
+MySQL, SQLite, Oracle, Informix...), the index columns are filled only when a
+session is inserted or updated. If you add a column to C<Index> on a table that
+already contains sessions, this column stays C<NULL> for every existing session
+until it is written again. Such sessions are considered as "field absent":
+C<searchOn()> and C<searchOnExpr()> do not find them, and the C<not> clause of
+C<deleteIfLowerThan()> (which matches C<NULL> columns) can delete them. For
+example, a purge rule like C<< not =E<gt> { _session_kind =E<gt> 'Persistent' } >>
+would delete persistent sessions whose C<_session_kind> column was never filled.
+
+So, before relying on a new column, backfill it from the serialized data. These
+examples assume the JSON serializer and a table named C<sessions> whose
+C<a_session> column contains the serialized session.
+
+PostgreSQL:
+
+  UPDATE sessions SET _session_kind = a_session::json->>'_session_kind'
+    WHERE _session_kind IS NULL;
+
+MySQL / MariaDB:
+
+  UPDATE sessions
+    SET _session_kind = JSON_UNQUOTE(JSON_EXTRACT(a_session, '$._session_kind'))
+    WHERE _session_kind IS NULL;
+
+The JSON and hstore backends (L<Apache::Session::Browseable::PgJSON>,
+L<Apache::Session::Browseable::PgHstore>,
+L<Apache::Session::Browseable::MySQLJSON>) read the fields directly from the
+serialized data and are not concerned.
+
 =head1 SEE ALSO
 
 L<Apache::Session>, L<http://lemonldap-ng.org>,
