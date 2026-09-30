@@ -107,4 +107,55 @@ is_deeply( unser( "\xff\xfe", sub { 'next' } ),
     'next', 'Fallback called on invalid data with high bytes' );
 is( eval { unser("\xc3\xa9{") }, undef, 'Invalid data' );
 
+# serializeLatin1(): result can always be downgraded to Latin-1 bytes
+sub ser {
+    my $s = { data => shift };
+    Apache::Session::Serialize::JSON::serializeLatin1($s);
+}
+sub unser1 {
+    my $s = { serialized => shift };
+    Apache::Session::Serialize::JSON::unserializeLatin1($s);
+    $s->{data};
+}
+my $emoji = "\x{3a9}\x{20ac} \x{1f600}";
+foreach my $backend (qw(JSON::XS JSON::PP)) {
+    SKIP: {
+        skip "$backend is needed", 8 unless eval "require $backend; 1";
+        my $json = $backend->new->latin1->allow_nonref;
+        my $old = sub { my $j = $backend->new->allow_nonref; $j->encode(shift) };
+        my $l = { sn => $latin, n => 1, a => ["\x{e9}\x{ff}\x{80}"] };
+        my $s = $old->($l);
+        is( $json->encode($l), $s, "$backend: Latin-1 data is unchanged" );
+        ok( utf8::downgrade( my $c = $s, 1 ), "$backend: Latin-1 downgrade" );
+        my $d = { cn => $emoji, sn => $latin };
+        my $got = $json->encode($d);
+        like( $got, qr/^[\x00-\xff]*$/, "$backend: only Latin-1 characters" );
+        like( $got, qr/\\u03a9\\u20ac \\ud83d\\ude00/i,
+            "$backend: escapes, surrogate pair" );
+        ok( utf8::downgrade( my $c2 = $got, 1 ), "$backend: downgrade works" );
+        is_deeply( unser1($got), $d, "$backend: round trip" );
+        utf8::downgrade($got);
+        is_deeply( unser1($got), $d, "$backend: round trip of Latin-1 bytes" );
+        is_deeply( unser1( $json->encode( ["\x{20ac}"] ) ),
+            ["\x{20ac}"], "$backend: array" );
+    }
+}
+
+# The module itself, with the JSON backend in use
+{
+    my $l = { sn => $latin, cn => "\x{e9}\x{ff}" };
+    my $s = { data => $l };
+    Apache::Session::Serialize::JSON::serialize($s);
+    my $old = $s->{serialized};
+    utf8::downgrade($old);
+    my $new = ser($l);
+    ok( utf8::downgrade( $new, 1 ), 'serializeLatin1: Latin-1 downgrade' );
+    is( $new, $old, 'serializeLatin1: same as serialize for Latin-1 data' );
+    my $d = { cn => $emoji, sn => $latin, l => [$emoji] };
+    my $got = ser($d);
+    ok( utf8::downgrade( my $c = $got, 1 ), 'serializeLatin1: downgrade' );
+    unlike( $got, qr/[\x{100}-\x{10ffff}]/, 'serializeLatin1: only escapes' );
+    is_deeply( unser1($got), $d, 'serializeLatin1: round trip' );
+}
+
 done_testing();

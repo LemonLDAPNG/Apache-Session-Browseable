@@ -8,6 +8,7 @@ our $VERSION = '1.2.6';
 
 my $json     = JSON->new->allow_nonref;
 my $utf8Json = JSON->new->utf8->allow_nonref;
+my $latin1Json = JSON->new->latin1->allow_nonref;
 
 sub serialize {
     my $session = shift;
@@ -17,6 +18,15 @@ sub serialize {
     # JSON::PP doesn't flag its result as UTF-8 when data holds only Latin-1
     # characters: some DBD drivers would then store Latin-1 bytes
     utf8::upgrade( $session->{serialized} );
+    return $session->{serialized};
+}
+
+# For stores that can only hold Latin-1 bytes (Redis): characters above U+00FF
+# are written as \uXXXX escapes, so the result can always be downgraded
+sub serializeLatin1 {
+    my $session = shift;
+
+    $session->{serialized} = $latin1Json->encode( $session->{data} );
     return $session->{serialized};
 }
 
@@ -99,6 +109,13 @@ C<unserializeLatin1()>, which skips the UTF-8 decode, and
 L<Apache::Session::Browseable::Store::File> always writes UTF-8. Files written
 by an older version keep their ambiguity: Latin-1 bytes that also form a valid
 UTF-8 sequence can't be told apart from UTF-8 ones.
+
+Redis clients refuse characters above U+00FF. Redis therefore writes sessions
+with C<serializeLatin1()>: characters above U+00FF (surrogate pairs above
+U+FFFF) are escaped as C<\uXXXX> and the others are kept, so the result can
+always be downgraded to Latin-1 bytes. For a session holding only Latin-1
+characters, it is the same string as C<serialize()>. C<unserializeLatin1()>
+reads the escapes back as the original characters.
 
 =head1 UPGRADE
 

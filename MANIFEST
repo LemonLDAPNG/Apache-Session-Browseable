@@ -57,6 +57,7 @@ t/Apache-Session-Browseable-Redis-helpers.t
 t/Apache-Session-Browseable-Redis-searchLtGt.t
 t/Apache-Session-Browseable-Redis-searchOnExpr.t
 t/Apache-Session-Browseable-Serialize-JSON.t
+t/Apache-Session-Browseable-Serialize-JSON-PP.t
 t/Apache-Session-Browseable-SQLite.t
 t/Apache-Session-Browseable-Store-DBI.t
 t/Apache-Session-Browseable-Store-File.t
