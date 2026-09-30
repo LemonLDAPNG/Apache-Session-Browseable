@@ -87,16 +87,17 @@ already contains sessions, this column stays C<NULL> for every existing session
 until it is written again. Such sessions are considered as "field absent":
 C<searchOn()> and C<searchOnExpr()> do not find them, and the C<not> clause of
 C<deleteIfLowerThan()> (which matches C<NULL> columns) can delete them. For
-example, a purge rule like C<< not =E<gt> { _session_kind =E<gt> 'Persistent' } >>
-would delete persistent sessions whose C<_session_kind> column was never filled.
+example, Lemonldap::NG purges with
+C<< not =E<gt> { _session_kind =E<gt> 'Persistent' } >>: it would delete
+persistent sessions whose C<_session_kind> column was never filled.
 Conversely, a column that was never filled never matches the C<or>/C<and>
 thresholds of C<deleteIfLowerThan()> (a C<NULL> column is never lower than a
-value): these sessions are not purged through that field. For example, a rule
-on C<_lastSeen> alone would never purge them, while Lemonldap::NG's rule also
-has C<_utime>, which still purges them.
+value): these sessions are not purged through that field (an C<or> rule can
+still purge them through its other fields).
 
 So, before relying on a new column, you must backfill it. Which method to use
-depends on the backend.
+depends on the backend. The examples below backfill a column named
+C<_session_kind> (a field of Lemonldap::NG sessions): replace it by your field.
 
 =head2 Backends that need no backfill
 
@@ -197,8 +198,8 @@ C<tie> and C<untie> loses that update.
 
 =item *
 
-It does not change C<_utime> (unless your application does it itself, as
-Lemonldap::NG does), so sessions do not get a longer life.
+The session data is written back unchanged: no timestamp stored in the
+session is updated, so sessions do not get a longer life.
 
 =item *
 
@@ -208,10 +209,11 @@ Sessions that cannot be unserialized are reported on C<STDERR> and skipped.
 
 =head2 Do not just wait for sessions to be rewritten
 
-Most sessions expire after the session timeout and are purged through
-C<_utime>, but persistent sessions (C<_session_kind> set to C<Persistent>) never
-expire and are rewritten only when the user logs in. They are exactly the ones
-the C<not> clause could delete: backfill them before enabling such a rule.
+Short-lived sessions expire and sessions rewritten regularly get their column
+filled over time, but a session that is never rewritten keeps a C<NULL> column
+forever. With Lemonldap::NG, persistent sessions never expire and are rewritten
+only when the user logs in: they are exactly the ones its purge rule could
+delete. Backfill before relying on the column.
 
 =head1 SEE ALSO
 
