@@ -310,8 +310,8 @@ otherwise nothing is returned and an error is printed on STDERR. Spaces
 around the value are ignored.
 
 Fields are compared in SQL as deleteIfLowerThan() does: fields listed in
-C<Index> on their (integer) generated column, which index is used, other
-fields with C<cast(JSON_VALUE(a_session, '$.field') as unsigned)>. Values are
+C<Index> on their (integer) generated column, which index is used (only if
+the Index check accepted this column, see above), other fields with C<cast(JSON_VALUE(a_session, '$.field') as unsigned)>. Values are
 compared as unsigned integers: a non-numeric value is 0.
 
 Sessions without the field are never returned. This differs from the Perl

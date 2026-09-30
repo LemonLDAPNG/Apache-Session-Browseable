@@ -105,7 +105,7 @@ my ( $ids, $res, @res, $rule, $ret, $err );
     }
 }
 
-# 11. Invalid batch sizes fall back to the default one
+# Invalid batch sizes fall back to the default one
 {
     no warnings 'once';
     $ids = reset_sessions( map { ( "s$_" => { uid => "u$_" } ) } 1 .. 3 );
@@ -126,7 +126,7 @@ my ( $ids, $res, @res, $rule, $ret, $err );
     }
 }
 
-# 12. Subclass without its own populate()
+# Subclass without its own populate()
 {
 
     package My::SQLiteSubclass;
@@ -292,7 +292,7 @@ $res = $class->searchGt( $args, 'n', 12 );
 is( join( ',', sort map { $rev{$_} } keys %$res ),
     'dec,exp', 'searchGt in Perl: numeric value' );
 
-# 14. A field name containing a quote is escaped as in searchOn(): it is no
+# A field name containing a quote is escaped as in searchOn(): it is no
 # longer found in Index and is compared in Perl, never interpolated in SQL
 $ids = reset_sessions(
     a => { uid => 'a', "a'b" => 100 },
