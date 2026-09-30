@@ -111,6 +111,16 @@ is used: sessions purge then calls deleteIfLowerThan() on C<_utime> and
 C<_lastSeen>, which does nothing unless both fields are in C<Index> (purge
 then falls back to reading all sessions).
 
+To add C<_lastSeen> to an existing table, do it B<before> adding the field to
+C<Index>: the module writes every C<Index> column, so a missing column makes
+every session write fail. First create the column and its index:
+
+  ALTER TABLE sessions ADD COLUMN _lastSeen bigint;
+  CREATE INDEX ls1 ON sessions (_lastSeen);
+
+then backfill it (see L<Apache::Session::Browseable/"ADDING A COLUMN TO Index ON AN EXISTING TABLE">)
+and only then add C<_lastSeen> to C<Index>.
+
 Use it with Perl:
 
   use Apache::Session::Browseable::Postgres;
