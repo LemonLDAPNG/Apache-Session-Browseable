@@ -25,6 +25,21 @@ sub populate {
     return $self;
 }
 
+# DBD::mysql needs mysql_enable_utf8mb4 at connection time to exchange UTF-8
+# (see the Store)
+sub _classDbh {
+    my ( $class, $args ) = @_;
+
+    my $datasource = $args->{DataSource} or die "No datasource given !";
+    return DBI->connect_cached(
+        $datasource,
+        $args->{UserName},
+        $args->{Password},
+        Apache::Session::Browseable::Store::MariaDBJSON->connectAttributes(
+            $datasource)
+    ) || die $DBI::errstr;
+}
+
 # Indexed fields are read from the generated column of the same name: MariaDB
 # doesn't always use the index of a generated column when a query contains
 # its expression
@@ -149,9 +164,11 @@ Use it with Perl:
 
 The DSN selects the driver: C<dbi:MariaDB:...> requires DBD::MariaDB and
 C<dbi:mysql:...> requires DBD::mysql, otherwise DBI dies with
-C<install_driver(...) failed>. DBD::MariaDB always exchanges UTF-8, whereas
-with DBD::mysql this module sets C<mysql_enable_utf8>, which selects utf8mb3:
-a character outside the BMP (an emoji) can then not be found.
+C<install_driver(...) failed>. DBD::MariaDB always exchanges UTF-8 (utf8mb4).
+With DBD::mysql, this module connects with C<mysql_enable_utf8mb4>, which
+selects utf8mb4 for the connection (characters outside the BMP, such as
+emoji, are supported). When you give your own C<Handle> to the store, it is
+used as is: connect it with C<mysql_enable_utf8mb4> (or C<SET NAMES utf8mb4>).
 
 Use it like L<Apache::Session::Browseable::MySQL>.
 

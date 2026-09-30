@@ -48,6 +48,7 @@ t/Apache-Session-Browseable-DBI.t
 t/Apache-Session-Browseable-File.t
 t/Apache-Session-Browseable-LDAP.t
 t/Apache-Session-Browseable-lowerThan.t
+t/Apache-Session-Browseable-MariaDBJSON-charset.t
 t/Apache-Session-Browseable-MariaDBJSON.t
 t/Apache-Session-Browseable-MySQL.t
 t/Apache-Session-Browseable-MySQLJSON.t
