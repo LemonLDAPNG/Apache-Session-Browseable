@@ -10,8 +10,9 @@ our @ISA =
 our $VERSION = '1.2.2';
 
 sub connection {
-    my($self,$session)=@_;
-    $self->SUPER::connection($session);
+    my ( $self, $session ) = @_;
+    $self->_connection( $session, 'Apache::Session::Store::MySQL',
+        { RaiseError => 1, AutoCommit => 1 } );
     if ( $self->{dbh}->{Driver}->{Name} eq "mysql" ) {
         $self->{dbh}->{mysql_enable_utf8} = 1;
     }

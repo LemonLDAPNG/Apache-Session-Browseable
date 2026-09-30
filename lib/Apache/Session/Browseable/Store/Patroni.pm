@@ -4,6 +4,7 @@ use strict;
 
 use DBI;
 use Apache::Session::Store::Postgres;
+use Apache::Session::Browseable::Store::DBI;
 
 our @ISA     = qw(Apache::Session::Store::Postgres);
 our $VERSION = '1.3.19';
@@ -46,13 +47,19 @@ sub connection {
           _buildDataSource( $originalDataSource, $cache->{leader} );
     }
 
+    my $reused;
     foreach ( 0 .. 1 ) {
         (
             $self->checkMaster( $session->{args} )
               or warn "Patroni check failed"
         ) if $self->{failure};
         eval {
-            $self->{dbh} = DBI->connect(
+            $reused = Apache::Session::Browseable::Store::DBI::_reusedHandle(
+                $self, $session->{args},
+                @{ $session->{args} }{qw(DataSource UserName Password)},
+                { RaiseError => 1, AutoCommit => 0 }
+            );
+            $self->{dbh} = $reused || DBI->connect(
                 $session->{args}->{DataSource},
                 $session->{args}->{UserName},
                 $session->{args}->{Password},
@@ -69,7 +76,7 @@ sub connection {
     die $@ if $@;
 
     #If we open the connection, we close the connection
-    $self->{disconnect} = 1;
+    $self->{disconnect} = $reused ? 0 : 1;
 
     #the programmer has to tell us what commit policy to use
     $self->{commit} = $session->{args}->{Commit} // 1;

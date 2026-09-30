@@ -31,6 +31,17 @@ sub connection {
     my $password = $session->{args}->{Password}
       || $Password;
 
+    if (
+        my $dbh = $self->_reusedHandle(
+            $session->{args}, $datasource, $username, $password,
+            { RaiseError => 1 }
+        )
+      )
+    {
+        $self->{dbh} = $dbh;
+        return;
+    }
+
     $self->{dbh} =
       DBI->connect( $datasource, $username, $password, { RaiseError => 1 } )
       || die $DBI::errstr;

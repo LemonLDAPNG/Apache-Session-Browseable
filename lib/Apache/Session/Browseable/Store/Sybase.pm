@@ -9,5 +9,11 @@ our @ISA =
   qw(Apache::Session::Browseable::Store::DBI Apache::Session::Store::Sybase);
 our $VERSION = '1.2.2';
 
+sub connection {
+    my ( $self, $session ) = @_;
+    $self->_connection( $session, 'Apache::Session::Store::Sybase',
+        { RaiseError => 1, AutoCommit => 0 } );
+}
+
 1;
 
