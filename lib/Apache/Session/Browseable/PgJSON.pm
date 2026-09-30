@@ -201,6 +201,7 @@ sub _buildLowerThanExpression {
 # "<" or ">", $value a number checked by the caller
 sub _buildCompareExpression {
     my ( $class, $field, $op, $value ) = @_;
+    Apache::Session::Browseable::_common->_checkOp($op);
     my $f = $class->_sqlField($field);
     return "cast($f as bigint) $op $value";
 }

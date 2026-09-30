@@ -173,13 +173,24 @@ SKIP: {
     }
 }
 
-# _buildCompareExpression() only accepts the operators it knows
-SKIP: {
-    my $class = 'Apache::Session::Browseable::SQLite';
-    skip "$class can't be loaded", 1 unless ( eval "require $class" );
-    eval { $class->_buildCompareExpression( '_utime', '; DROP TABLE x', 1 ) };
-    like( $@, qr/invalid operator/,
-        '_buildCompareExpression rejects an unknown operator' );
+# _buildCompareExpression() only accepts the operators it knows, in each
+# backend
+foreach my $backend ( 'Postgres', 'PgJSON', 'PgHstore', 'MySQL', 'MySQLJSON',
+    'MariaDBJSON', 'SQLite', 'Oracle', 'Informix', 'Sybase', 'Patroni' )
+{
+    my $class = "Apache::Session::Browseable::$backend";
+  SKIP: {
+        skip "$class can't be loaded", 4 unless ( eval "require $class" );
+        foreach my $op ( '; DROP TABLE x', '<=', '', undef ) {
+            eval {
+                $class->_buildCompareExpression( '_utime', $op, 1,
+                    FakeDbh->new, {} );
+            };
+            like( $@, qr/invalid operator/,
+                "$backend: _buildCompareExpression rejects "
+                  . ( defined $op ? "'$op'" : 'undef' ) );
+        }
+    }
 }
 
 # No public fallback in _common.pm: File keeps the Lemonldap::NG one

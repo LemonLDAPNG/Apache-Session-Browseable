@@ -29,6 +29,7 @@ sub populate {
 # prevents the use of an index on the field
 sub _buildCompareExpression {
     my ( $class, $field, $op, $value ) = @_;
+    $class->_checkOp($op);
     return "$field $op $value";
 }
 

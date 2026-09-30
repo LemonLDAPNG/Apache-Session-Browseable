@@ -34,6 +34,15 @@ sub _isNumber {
     return ( defined($value) and $value =~ /^-?[0-9]+(?:\.[0-9]+)?\z/ );
 }
 
+# The operator of a comparison is inserted into SQL queries
+sub _checkOp {
+    my ( $class, $op ) = @_;
+    die "_buildCompareExpression: invalid operator '"
+      . ( defined $op ? $op : 'undef' ) . "'\n"
+      unless ( defined $op and ( $op eq '<' or $op eq '>' ) );
+    return $op;
+}
+
 # searchLt() and searchGt() values are also inserted into SQL queries. Return
 # the value without surrounding spaces (kept by the Lemonldap::NG CLI), or
 # undef if it isn't a number

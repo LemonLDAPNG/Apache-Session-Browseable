@@ -95,6 +95,7 @@ sub searchGt {
 # column, so its index can be used
 sub _buildCompareExpression {
     my ( $class, $field, $op, $value ) = @_;
+    $class->_checkOp($op);
     return "cast($field as bigint) $op $value";
 }
 

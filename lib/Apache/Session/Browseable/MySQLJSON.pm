@@ -201,6 +201,7 @@ sub get_key_from_all_sessions {
 # generated columns
 sub _buildCompareExpression {
     my ( $class, $field, $op, $value, $dbh, $args ) = @_;
+    $class->_checkOp($op);
     my $f = $class->_sqlField( $dbh, $field, $args );
     return "cast($f as UNSIGNED) $op $value";
 }
