@@ -227,6 +227,20 @@ my $err = stderrOf(
 is_deeply( $res, {}, 'searchGt: connection error, empty result' );
 like( $err, qr/searchGt: unable to connect/, '... and a warning' );
 
+# Bind error (wrong password): same contract as a connection error
+SKIP: {
+    skip 'Bind DN not set', 2 unless length( $args->{ldapBindDN} // '' );
+    $err = stderrOf(
+        sub {
+            $res =
+              $package->searchLt( { %$args, ldapBindPassword => 'wrong' },
+                '_oidcRtUpdate', 1 );
+        }
+    );
+    is_deeply( $res, {}, 'searchLt: bind error, empty result' );
+    like( $err, qr/searchLt: unable to connect/, '... and a warning' );
+}
+
 # Only sessions stored directly under ldapConfBase are seen
 clean();
 $args->{Index} = 'uid _utime';
@@ -364,6 +378,21 @@ $err = stderrOf(
 is_deeply( \@r, [ 0, 0 ], 'deleteIfLowerThan: connection error returns ( 0, 0 )' );
 like( $err, qr/unable to connect/, 'Connection error is reported' );
 is_deeply( remaining(), $before, 'Connection error deleted nothing' );
+
+# Bind error (wrong password): false
+SKIP: {
+    skip 'Bind DN not set', 3 unless length( $args->{ldapBindDN} // '' );
+    $err = stderrOf(
+        sub {
+            @r = $package->deleteIfLowerThan(
+                { %$args, ldapBindPassword => 'wrong' },
+                { or                       => { _utime => 10**9 } } );
+        }
+    );
+    is_deeply( \@r, [ 0, 0 ], 'deleteIfLowerThan: bind error returns ( 0, 0 )' );
+    like( $err, qr/unable to connect/, 'Bind error is reported' );
+    is_deeply( remaining(), $before, 'Bind error deleted nothing' );
+}
 
 # Search error: false
 $err = stderrOf(
