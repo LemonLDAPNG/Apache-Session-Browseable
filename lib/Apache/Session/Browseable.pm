@@ -95,25 +95,123 @@ value): these sessions are not purged through that field. For example, a rule
 on C<_lastSeen> alone would never purge them, while Lemonldap::NG's rule also
 has C<_utime>, which still purges them.
 
-So, before relying on a new column, backfill it from the serialized data. These
-examples assume the JSON serializer and a table named C<sessions> whose
-C<a_session> column contains the serialized session.
+So, before relying on a new column, you must backfill it. Which method to use
+depends on the backend.
 
-PostgreSQL:
+=head2 Backends that need no backfill
+
+L<Apache::Session::Browseable::PgJSON>, L<Apache::Session::Browseable::PgHstore>,
+L<Apache::Session::Browseable::MySQLJSON> and MariaDB's JSON variant use an
+expression index or a generated column computed from the serialized data:
+creating the index (or the generated column) computes it for every existing
+row.
+
+=head2 Backfilling in SQL (JSON serializer only)
+
+This is possible only if the serializer is C<Apache::Session::Serialize::JSON>
+(the case of Postgres, Patroni, MySQL, SQLite, Oracle...) B<and> the database
+can extract a field from a JSON text. The following examples assume a table
+named C<sessions> whose C<a_session> column contains the serialized session.
+
+If a single row is not valid JSON, the whole C<UPDATE> fails and nothing is
+backfilled. Such rows exist: sessions written by old versions with Storable
+(the JSON serializer still reads them through C<Storable::thaw>), or corrupted
+rows. The examples therefore skip them.
+
+=over
+
+=item PostgreSQL 16 and later
 
   UPDATE sessions SET _session_kind = a_session::json->>'_session_kind'
-    WHERE _session_kind IS NULL;
+    WHERE _session_kind IS NULL AND a_session IS JSON;
 
-MySQL / MariaDB:
+Older PostgreSQL versions have no simple equivalent of C<IS JSON>: use the
+generic method below.
+
+=item MySQL / MariaDB
 
   UPDATE sessions
     SET _session_kind = JSON_UNQUOTE(JSON_EXTRACT(a_session, '$._session_kind'))
-    WHERE _session_kind IS NULL;
+    WHERE _session_kind IS NULL AND JSON_VALID(a_session);
 
-The JSON and hstore backends (L<Apache::Session::Browseable::PgJSON>,
-L<Apache::Session::Browseable::PgHstore>,
-L<Apache::Session::Browseable::MySQLJSON>) read the fields directly from the
-serialized data and are not concerned.
+=item SQLite
+
+Use C<json_extract(a_session, '$._session_kind')>, restricted to rows where
+C<json_valid(a_session)> is true.
+
+=item Oracle (12.1.0.2 and later)
+
+Use C<JSON_VALUE(a_session, '$._session_kind')>.
+
+=back
+
+Rows skipped by these statements (and rows that were still C<NULL> after them)
+must be handled with the generic method.
+
+=head2 Backends where SQL cannot be used
+
+=over
+
+=item Sybase
+
+L<Apache::Session::Browseable::Sybase> uses
+C<Apache::Session::Serialize::Sybase>, not JSON: no SQL statement can extract a
+field from C<a_session>.
+
+=item Informix
+
+The session is stored as JSON text, but Informix has no simple function to
+extract a field from a text column.
+
+=item Redis and LDAP
+
+The index is maintained by the module only when a session is written, and there
+is no SQL column to fill.
+
+=back
+
+Use the generic method for these backends.
+
+=head2 Generic method: re-save every session from Perl
+
+This works with every backend (including the ones above and non-JSON rows): read
+each session and write it again, so that the store rewrites its index columns.
+Set C<$class> and C<$args> as you do in your application:
+
+  my $class = 'Apache::Session::Browseable::Postgres';   # your backend
+  my $ids   = $class->get_key_from_all_sessions( $args, sub { 1 } );
+  foreach my $id ( keys %$ids ) {
+      tie my %s, $class, $id, $args;
+      $s{_session_kind} = $s{_session_kind};   # marks the session as modified
+      untie %s;
+  }
+
+Notes:
+
+=over
+
+=item *
+
+Run it when the activity is low: a session updated by another process between
+C<tie> and C<untie> loses that update.
+
+=item *
+
+It does not change C<_utime> (unless your application does it itself, as
+Lemonldap::NG does), so sessions do not get a longer life.
+
+=item *
+
+Sessions that cannot be unserialized are reported on C<STDERR> and skipped.
+
+=back
+
+=head2 Do not just wait for sessions to be rewritten
+
+Most sessions expire after the session timeout and are purged through
+C<_utime>, but persistent sessions (C<_session_kind> set to C<Persistent>) never
+expire and are rewritten only when the user logs in. They are exactly the ones
+the C<not> clause could delete: backfill them before enabling such a rule.
 
 =head1 SEE ALSO
 
