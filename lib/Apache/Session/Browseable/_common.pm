@@ -74,7 +74,9 @@ sub _searchQuery {
 }
 
 # Perl version of searchLt() and searchGt(): read all sessions and keep those
-# for which $test->( value of $selectField ) is true
+# for which $test->( value of $selectField ) is true. As in SQL, a value that
+# doesn't start with a number is 0: Perl would read "inf" or "nan" as
+# Infinity and NaN
 sub _searchByTest {
     my ( $class, $args, $selectField, $test, @fields ) = @_;
     my %res;
@@ -82,7 +84,9 @@ sub _searchByTest {
         $args,
         sub {
             my ( $entry, $id ) = @_;
-            return undef unless ( $test->( $entry->{$selectField} ) );
+            my $v = $entry->{$selectField};
+            $v = 0 if ( defined $v and $v !~ /^\s*-?[0-9]/ );
+            return undef unless ( $test->($v) );
             if (@fields) {
                 $res{$id}->{$_} = $entry->{$_} foreach (@fields);
             }

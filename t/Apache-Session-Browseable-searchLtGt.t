@@ -117,6 +117,35 @@ foreach (@tests) {
     }
 }
 
+# Perl comparison: "inf" and "nan" are 0 as in SQL, not Infinity and NaN
+foreach my $backend (qw(SQLite Cassandra)) {
+    my $class = "Apache::Session::Browseable::$backend";
+    my $args  = $backend eq 'Cassandra' ? $index : {};
+  SKIP: {
+        skip "$class can't be loaded", 4 unless ( eval "require $class" );
+        no strict 'refs';
+        no warnings 'redefine';
+        local *{"${class}::get_key_from_all_sessions"} = sub {
+            my ( $c, $args, $sub ) = @_;
+            $sub->( { n => $_ }, $_ ) foreach (qw(inf Infinity nan NaN 5));
+            return {};
+        };
+        my $res = $class->searchLt( $args, 'n', 1 );
+        is_deeply( [ sort keys %$res ],
+            [qw(Infinity NaN inf nan)],
+            "$backend: inf and nan are lower than 1" );
+        $res = $class->searchGt( $args, 'n', -1 );
+        is_deeply( [ sort keys %$res ],
+            [qw(5 Infinity NaN inf nan)],
+            "$backend: inf and nan are greater than -1" );
+        $res = $class->searchGt( $args, 'n', 0 );
+        is_deeply( [ sort keys %$res ],
+            ['5'], "$backend: inf and nan are not greater than 0" );
+        $res = $class->searchLt( $args, 'n', 0 );
+        is_deeply( $res, {}, "$backend: inf and nan are not lower than 0" );
+    }
+}
+
 # Column backends: fields not listed in Index are compared in Perl (always
 # with Cassandra: CQL can't compare them). Sessions without the field are
 # skipped; "abc" is 0 as in Perl
