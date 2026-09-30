@@ -573,6 +573,19 @@ When the field is indexed, sessions are found through their index values:
 sessions whose value is C<0> or empty, or written before the field was added
 to C<Index>, are missed until they are rewritten.
 
+Differences with the SQL backends (searchLt(), searchGt() and
+deleteIfLowerThan()):
+
+=over
+
+=item * Values which aren't numbers are ignored here, whereas SQL backends
+compare them as C<0> or by their numeric prefix (C<12abc> is C<12>).
+
+=item * Fields whose value is C<0> or empty are not indexed, so they are
+missed when the field is indexed, whereas SQL backends find them.
+
+=back
+
 =head2 deleteIfLowerThan()
 
   my ( $ok, $count ) = Apache::Session::Browseable::LDAP->deleteIfLowerThan(
