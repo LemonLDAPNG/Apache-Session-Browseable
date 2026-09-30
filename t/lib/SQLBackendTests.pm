@@ -138,9 +138,9 @@ sub run_tests {
         }
     );
 
-    # "reuse" option: sessions use a persistent handle
+    # Connection reuse (default) and "noreuse" option
     {
-        my $rargs = { %$args, reuse => 1 };
+        my $rargs = $args;
         my $dbhOf = sub { tied( %{ $_[0] } )->{object_store}->{dbh} };
         my %s;
         tie %s, $class, undef, $rargs;
@@ -150,12 +150,18 @@ sub run_tests {
         untie %s;
         ok( $rdbh->{Active}, 'reuse: connection kept at untie' );
 
+        tie %s, $class, $rid, { %$args, noreuse => 1 };
+        my $ndbh = $dbhOf->( \%s );
+        untie %s;
+        isnt( refaddr($ndbh), refaddr($rdbh), 'noreuse: new handle' );
+        ok( !$ndbh->{Active}, 'noreuse: connection closed at untie' );
+
         tie %s, $class, $rid, $rargs;
         is( refaddr( $dbhOf->( \%s ) ), refaddr($rdbh), 'reuse: handle reused' );
         is( $s{mail}, 'dwho@badwolf.org', 'reuse: session retrieved' );
         $s{mail} = 'reuse@badwolf.org';
         untie %s;
-        tie %s, $class, $rid, $args;
+        tie %s, $class, $rid, { %$args, noreuse => 1 };
         is( $s{mail}, 'reuse@badwolf.org', 'reuse: update committed' );
         untie %s;
 

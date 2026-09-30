@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
-# "reuse" option of DBI stores, tested with SQLite
+# Connection reuse of DBI stores (default) and "noreuse" option, tested with
+# SQLite
 
 use strict;
 use warnings;
@@ -40,8 +41,8 @@ my $quiet = sub {
 my $class = 'Apache::Session::Browseable::SQLite';
 use_ok($class);
 
-my $args  = { DataSource => $dsn, Commit => 1, Index => 'uid' };
-my $reuse = { %$args, reuse => 1 };
+my $args    = { DataSource => $dsn, Commit => 1, Index => 'uid' };
+my $noreuse = { %$args, noreuse => 1 };
 my $dbhOf = sub { tied( %{ $_[0] } )->{object_store}->{dbh} };
 my $newSession = sub {
     my ( $a, %data ) = @_;
@@ -55,97 +56,97 @@ my $newSession = sub {
 
 my ( %session, $dbh );
 
-# 1. Without "reuse": a new connection for each session, closed at untie
-tie %session, $class, undef, $args;
+# 1. With "noreuse": a new connection for each session, closed at untie
+tie %session, $class, undef, $noreuse;
 $session{uid} = 'dwho';
 my $id = $session{_session_id};
 $dbh = $dbhOf->( \%session );
 untie %session;
-ok( !$dbh->{Active}, 'Without reuse, the connection is closed at untie' );
-tie %session, $class, $id, $args;
+ok( !$dbh->{Active}, 'With noreuse, the connection is closed at untie' );
+tie %session, $class, $id, $noreuse;
 isnt( refaddr( $dbhOf->( \%session ) ),
-    refaddr($dbh), 'Without reuse, each session opens a new connection' );
+    refaddr($dbh), 'With noreuse, each session opens a new connection' );
 untie %session;
 
-# 2. With "reuse": the same handle for each session
-tie %session, $class, undef, $reuse;
+# 2. By default: the same handle for each session
+tie %session, $class, undef, $args;
 $session{uid} = 'rtyler';
 $id  = $session{_session_id};
 $dbh = $dbhOf->( \%session );
-is( $dbh->{AutoCommit}, '', 'Same attributes as without reuse (AutoCommit)' );
+is( $dbh->{AutoCommit}, '', 'Same attributes as with noreuse (AutoCommit)' );
 {
     local $SIG{__WARN__} = sub { };    # sqlite_unicode is deprecated
-    ok( $dbh->{sqlite_unicode}, 'Same flags as without reuse' );
+    ok( $dbh->{sqlite_unicode}, 'Same flags as with noreuse' );
 }
 untie %session;
-ok( $dbh->{Active}, 'With reuse, the connection is kept at untie' );
+ok( $dbh->{Active}, 'By default, the connection is kept at untie' );
 ok( $stored->($id), 'Session committed' );
 ok( $canWrite->(),  'No transaction left open' );
 
-tie %session, $class, $id, $reuse;
+tie %session, $class, $id, $args;
 is( refaddr( $dbhOf->( \%session ) ), refaddr($dbh), 'Handle reused' );
 is( $session{uid}, 'rtyler', 'Session data retrieved' );
 $session{uid} = 'rtyler2';
 untie %session;
 ok( $canWrite->(), 'No transaction left open after an update' );
-tie %session, $class, $id, $args;
+tie %session, $class, $id, $noreuse;
 is( $session{uid}, 'rtyler2', 'Update committed' );
 untie %session;
 
-my $res = $class->searchOn( $reuse, 'uid', 'rtyler2' );
-is_deeply( [ keys %$res ], [$id], 'searchOn works with reuse' );
+my $res = $class->searchOn( $args, 'uid', 'rtyler2' );
+is_deeply( [ keys %$res ], [$id], 'searchOn works by default' );
 
 # 3. Without Commit, the transaction is rolled back at untie (as disconnect
 # did), and doesn't stay open
-tie %session, $class, $id, { %$reuse, Commit => 0 };
+tie %session, $class, $id, { %$args, Commit => 0 };
 is( refaddr( $dbhOf->( \%session ) ), refaddr($dbh), 'Handle reused' );
 $session{uid} = 'not committed';
 untie %session;
 ok( $canWrite->(), 'Commit => 0: no transaction left open' );
-tie %session, $class, $id, $reuse;
+tie %session, $class, $id, $args;
 is( $session{uid}, 'rtyler2', 'Commit => 0: update rolled back' );
 untie %session;
 
 # 4. A failed operation doesn't break the next ones
-ok( !eval { tie %session, $class, 'unknown', $reuse; 1 },
+ok( !eval { tie %session, $class, 'unknown', $args; 1 },
     'Unknown session: tie fails' );
 ok(
     !$quiet->(
-        sub { $newSession->( { %$reuse, TableName => 'missing' }, uid => 'x' ) }
+        sub { $newSession->( { %$args, TableName => 'missing' }, uid => 'x' ) }
     ),
     'Failed insert: tie fails'
 );
 ok( $canWrite->(), 'No transaction left open after failures' );
-tie %session, $class, $id, $reuse;
+tie %session, $class, $id, $args;
 is( refaddr( $dbhOf->( \%session ) ), refaddr($dbh), 'Handle still reused' );
 is( $session{uid}, 'rtyler2', 'Session retrieved after failures' );
 untie %session;
 
 # 5. Deletion
-my $id2 = $newSession->( $reuse, uid => 'deleted' );
-tie %session, $class, $id2, $reuse;
+my $id2 = $newSession->( $args, uid => 'deleted' );
+tie %session, $class, $id2, $args;
 tied(%session)->delete;
 untie %session;
 ok( !$stored->($id2), 'Session deleted' );
-ok( !eval { tie %session, $class, $id2, $reuse; 1 },
+ok( !eval { tie %session, $class, $id2, $args; 1 },
     'Deleted session is not found' );
 
 # 6. A given Handle wins
 my $mine = DBI->connect( $dsn, '', '', { RaiseError => 1, AutoCommit => 0 } );
-tie %session, $class, $id, { %$reuse, Handle => $mine };
+tie %session, $class, $id, { %$args, Handle => $mine };
 is( refaddr( $dbhOf->( \%session ) ), refaddr($mine), 'Given Handle is used' );
 untie %session;
 ok( $mine->{Active}, 'Given Handle is not closed' );
 
 # 7. Lost connection: a new one is opened
 $dbh->disconnect;
-tie %session, $class, $id, $reuse;
+tie %session, $class, $id, $args;
 my $new = $dbhOf->( \%session );
 ok( ( $new->{Active} and refaddr($new) != refaddr($dbh) ),
     'Lost connection replaced' );
 is( $session{uid}, 'rtyler2', 'Session retrieved with the new connection' );
 untie %session;
-tie %session, $class, $id, $reuse;
+tie %session, $class, $id, $args;
 is( refaddr( $dbhOf->( \%session ) ), refaddr($new), 'New handle reused' );
 untie %session;
 
@@ -170,7 +171,7 @@ foreach my $name ( sort keys %stores ) {
     my $session = sub {
         my ( $sid, %a ) = @_;
         return {
-            args => { DataSource => $dsn, Commit => 1, reuse => 1, %a },
+            args => { DataSource => $dsn, Commit => 1, %a },
             data => { _session_id => $sid },
             serialized => '{}',
         };
@@ -187,6 +188,12 @@ foreach my $name ( sort keys %stores ) {
     $s = $store->new;
     $s->connection( $session->($sid) );
     is( refaddr( $s->{dbh} ), refaddr($d), "$name: handle reused" );
+    undef $s;
+
+    $s = $store->new;
+    $s->connection( $session->( $sid, noreuse => 1 ) );
+    isnt( refaddr( $s->{dbh} ), refaddr($d), "$name: noreuse: new handle" );
+    ok( $s->{disconnect}, "$name: noreuse: connection closed by the store" );
     undef $s;
 
     # Without Commit, the insertion is rolled back when AutoCommit is off

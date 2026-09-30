@@ -5,10 +5,10 @@ use Apache::Session::Store::DBI;
 our @ISA     = qw(Apache::Session::Store::DBI);
 our $VERSION = 1.3.11;
 
-# "reuse" option: returns a handle cached by DBI->connect_cached() (which
+# Connection reuse (default): returns a handle cached by DBI->connect_cached() (which
 # pings it and reconnects if needed), opened with the attributes $attr that
 # the store uses without this option. Returns undef if the store is already
-# connected, if "reuse" isn't set or if a Handle is given.
+# connected, if "noreuse" is set or if a Handle is given.
 #
 # Stores don't disconnect a handle they didn't open, so a transaction that
 # the store doesn't commit (AutoCommit off, Commit not set or commit failure)
@@ -17,7 +17,7 @@ our $VERSION = 1.3.11;
 sub _reusedHandle {
     my ( $self, $args, $datasource, $username, $password, $attr ) = @_;
     return undef
-      if ( defined $self->{dbh} or !$args->{reuse} or exists $args->{Handle} );
+      if ( defined $self->{dbh} or $args->{noreuse} or exists $args->{Handle} );
     my $dbh = DBI->connect_cached( $datasource, $username, $password, $attr )
       || die $DBI::errstr;
     $self->{reuse_rollback} =
