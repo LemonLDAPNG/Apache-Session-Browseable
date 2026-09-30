@@ -16,6 +16,17 @@ BEGIN {
     }
 }
 
+# Redis clients croak on characters above U+00FF: key names built from a field
+# name or a value are sent as Latin-1 bytes (existing index sets keep their
+# name) or, if they hold such characters, as UTF-8 bytes. A UTF-8 name may
+# equal the Latin-1 name of another value: searches check the sessions found
+sub keyName {
+    my $name = shift;
+    $name = "$name";
+    utf8::encode($name) unless ( utf8::downgrade( $name, 1 ) );
+    return $name;
+}
+
 sub new {
     my ( $class, $session ) = @_;
     my $self;
@@ -43,7 +54,7 @@ sub insert {
     foreach my $i (@$index) {
         my $t = $session->{data}->{$i};
         next unless ( defined($t) and ( length($t) > 0 ) );
-        $self->{cache}->sadd( "${i}_$t", $id );
+        $self->{cache}->sadd( keyName("${i}_$t"), $id );
     }
 }
 
@@ -104,13 +115,13 @@ sub update {
                 || length($new_val) == 0
                 || $old_val ne $new_val )
             {
-                eval { $self->{cache}->srem( "${i}_$old_val", $id ) };
+                eval { $self->{cache}->srem( keyName("${i}_$old_val"), $id ) };
             }
         }
 
         # Add new index entry
         if ( defined($new_val) && length($new_val) > 0 ) {
-            $self->{cache}->sadd( "${i}_$new_val", $id );
+            $self->{cache}->sadd( keyName("${i}_$new_val"), $id );
         }
     }
 }
@@ -133,7 +144,7 @@ sub remove {
     foreach my $i (@$index) {
         my $t;
         next unless ( $t = $session->{data}->{$i} );
-        eval { $self->{cache}->srem( "${i}_$t", $id ); };
+        eval { $self->{cache}->srem( keyName("${i}_$t"), $id ); };
     }
     $self->{cache}->del($id);
 }

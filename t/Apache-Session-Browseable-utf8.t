@@ -119,11 +119,12 @@ SKIP: {
     );
 }
 
-# Redis can't store characters above U+00FF. It stores Latin-1, so
-# "\x{c3}\x{a9}" is stored as valid UTF-8: it must not be read as "\x{e9}"
+# Redis clients refuse characters above U+00FF: they are stored as JSON escapes
+# (index names as UTF-8). It stores Latin-1, so "\x{c3}\x{a9}" is stored as
+# valid UTF-8: it must not be read as "\x{e9}"
 SKIP: {
-    skip 'Set REDIS_URL to run Redis tests', 37 unless $ENV{REDIS_URL};
-    skip 'Redis module is needed', 37
+    skip 'Set REDIS_URL to run Redis tests', 71 unless $ENV{REDIS_URL};
+    skip 'Redis module is needed', 71
       unless eval { require Apache::Session::Browseable::Redis; 1 };
     my $class = 'Apache::Session::Browseable::Redis';
     my $args  = {
@@ -134,14 +135,19 @@ SKIP: {
         database => ( ( $ENV{REDIS_DBNUM} || 15 ) + 14 ) % 16,
         Index    => 'uid'
     };
-    roundTrip( 'Redis', $class, $args, $latin, "\x{c3}\x{a9}" );
+    my $emoji = "\x{3a9}\x{20ac} \x{1f600}";
+    roundTrip( 'Redis', $class, $args, $latin, "\x{c3}\x{a9}", $emoji );
 
     # Index entry of the previous value must be removed on update
-    my $redis = $class->_getRedis($args);
+    my $redis   = $class->_getRedis($args);
+    my $keyName = \&Apache::Session::Browseable::Store::Redis::keyName;
     foreach my $t (
         [ "m\x{e9}", 'toto' ],
         [ 'dwho',    'rtyler' ],
         [ 'dwho',    'rtyler', cn => $latin ],
+        [ $emoji,    'toto' ],
+        [ 'toto',    $emoji ],
+        [ $emoji,    "\x{20ac}", cn => $emoji ],
       )
     {
         my ( $old, $new, %data ) = @$t;
@@ -158,11 +164,56 @@ SKIP: {
         tie %session, $class, $id, $args;
         $session{uid} = $new;
         untie %session;
-        ok( !$redis->sismember( "uid_$old", $id ), "Index $l: old removed" );
-        ok( $redis->sismember( "uid_$new",  $id ), "Index $l: new added" );
+        ok( !$redis->sismember( $keyName->("uid_$old"), $id ),
+            "Index $l: old removed" );
+        ok( $redis->sismember( $keyName->("uid_$new"), $id ),
+            "Index $l: new added" );
         is_deeply( \@warn, [], "Index $l: no warning" );
         tie %session, $class, $id, $args;
         tied(%session)->delete;
+    }
+
+    # Search on values above U+00FF
+    my $new = sub {
+        my %data = @_;
+        my %session;
+        tie %session, $class, undef, $args;
+        $session{$_} = $data{$_} foreach ( keys %data );
+        my $id = $session{_session_id};
+        untie %session;
+        return $id;
+    };
+    my $omega = "\x{3a9}";
+    my $wide  = $new->( uid => $emoji, cn => $emoji );
+    my $om    = $new->( uid => $omega );
+    my $lat   = $new->( uid => "m\x{e9}" );
+
+    # "\x{3a9}" in UTF-8 is "\x{ce}\x{a9}", which is also a Latin-1 value
+    my $coll = $new->( uid => "\x{ce}\x{a9}" );
+    my %tied;
+    tie %tied, $class, $wide, $args;
+    is( $tied{cn}, $emoji, 'Wide characters: session saved' );
+    untie %tied;
+    my $r = $class->searchOn( $args, 'uid', $emoji, 'cn' );
+    is_deeply( [ keys %$r ], [$wide], 'Wide characters: searchOn' );
+    is( $r->{$wide}->{cn}, $emoji, 'Wide characters: searchOn with fields' );
+    $r = $class->searchOnExpr( $args, 'uid', "\x{3a9}*" );
+    ok( $r->{$wide} && $r->{$om}, 'Wide characters: searchOnExpr prefix' );
+    ok( !$r->{$coll}, 'Wide characters: searchOnExpr, other value skipped' );
+    $r = $class->searchOnExpr( $args, 'uid', "*\x{1f600}" );
+    is_deeply( [ keys %$r ], [$wide], 'Wide characters: searchOnExpr suffix' );
+    $r = $class->searchOnExpr( $args, 'uid', 'm*' );
+    ok( $r->{$lat}, 'Latin-1 value: searchOnExpr' );
+    ok( !$r->{$wide}, 'Latin-1 value: searchOnExpr, wide value skipped' );
+    $r = $class->searchOn( $args, 'uid', "m\x{e9}" );
+    is_deeply( [ keys %$r ], [$lat], 'Latin-1 value: searchOn' );
+    $r = $class->searchOn( $args, 'uid', $omega );
+    is_deeply( [ keys %$r ], [$om], 'Colliding names: wide value' );
+    $r = $class->searchOn( $args, 'uid', "\x{ce}\x{a9}" );
+    is_deeply( [ keys %$r ], [$coll], 'Colliding names: Latin-1 value' );
+    foreach my $id ( $wide, $om, $lat, $coll ) {
+        tie %tied, $class, $id, $args;
+        tied(%tied)->delete;
     }
 }
 

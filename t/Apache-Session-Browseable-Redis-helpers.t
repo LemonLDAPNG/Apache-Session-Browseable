@@ -17,6 +17,33 @@ is( $class->can('_exprPattern')->( 'u?[*]\\d', 'x' ),
     'u\\?\\[\\*\\]\\\\d_x', 'glob chars in field name' );
 is( $class->can('_globEscape')->('a*b'), 'a\\*b', '_globEscape' );
 
+# Key names: Latin-1 bytes when possible (existing sets), else UTF-8 bytes
+my $keyName = $class->can('_keyName');
+is( $keyName->('uid_dwho'), 'uid_dwho', 'keyName: ASCII' );
+is( $keyName->("uid_m\x{e9}"), "uid_m\xe9", 'keyName: Latin-1' );
+ok( !utf8::is_utf8( $keyName->("uid_m\x{e9}") ), 'keyName: Latin-1 bytes' );
+is( $keyName->("uid_\x{3a9}"), "uid_\xce\xa9", 'keyName: UTF-8' );
+is( $keyName->("\x{e9}_\x{20ac}"), "\xc3\xa9_\xe2\x82\xac",
+    'keyName: whole name in UTF-8' );
+is( $keyName->("uid_\x{1f600}"), "uid_\xf0\x9f\x98\x80", 'keyName: emoji' );
+is( $keyName->(42), '42', 'keyName: number' );
+{
+    my $s = "uid_\x{3a9}";
+    $keyName->($s);
+    is( $s, "uid_\x{3a9}", 'keyName: argument unchanged' );
+}
+is( $class->can('_exprPattern')->( 'uid', "\x{3a9}*" ),
+    "uid_\xce\xa9*", 'pattern with wide characters' );
+is_deeply(
+    [ $class->can('_exprPatterns')->( 'uid', "m\x{e9}*" ) ],
+    ["uid_m\xe9*", "uid_m\xc3\xa9*"],
+    'patterns: Latin-1 and UTF-8'
+);
+is_deeply( [ $class->can('_exprPatterns')->( 'uid', 'jd*' ) ],
+    ['uid_jd*'], 'patterns: ASCII' );
+is_deeply( [ $class->can('_exprPatterns')->( 'uid', "m\x{e9}" ) ],
+    ["uid_m\xe9"], 'patterns: no wildcard' );
+
 # Orphan removal without Lua
 {
 

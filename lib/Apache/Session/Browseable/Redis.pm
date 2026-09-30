@@ -218,10 +218,28 @@ sub _globEscape {
 
 # SCAN pattern of the index sets for searchOnExpr(): '*' is the only
 # wildcard of the value. The sessions are checked afterwards with _exprRe()
-sub _exprPattern {
+sub _exprGlob {
     my ( $field, $value ) = @_;
     $value =~ s/([?\[\]\\])/\\$1/g;
     return _globEscape($field) . "_$value";
+}
+
+sub _exprPattern {
+    return _keyName( _exprGlob(@_) );
+}
+
+# SCAN patterns for searchOnExpr(). The name of a set is Latin-1 unless it
+# holds characters above U+00FF, so a wildcard may stand for such characters
+# while the literal part is not ASCII: the UTF-8 form is then scanned too
+sub _exprPatterns {
+    my ( $field, $value ) = @_;
+    my @res = ( _exprPattern( $field, $value ) );
+    if ( $value =~ /\*/ ) {
+        my $p = _exprGlob( $field, $value );
+        utf8::encode($p);
+        push @res, $p unless ( $p eq $res[0] );
+    }
+    return @res;
 }
 
 # Add decoded sessions whose $selectField matches $test to $res: the index
@@ -243,8 +261,9 @@ sub searchOn {
 
         my $redisObj = $class->_getRedis($args);
         my $sessions =
-          $class->_readIndex( $args, $redisObj, "${selectField}_$value", undef,
-            1 );
+          $class->_readIndex( $args, $redisObj,
+            _keyName("${selectField}_$value"),
+            undef, 1 );
         $class->_keepMatching( \%res, $sessions, $selectField,
             sub { $_[0] eq $value }, @fields );
     }
@@ -276,21 +295,23 @@ sub searchOnExpr {
     my $re = _exprRe($value);
     if ( $class->isIndexed( $args, $selectField ) ) {
         my $redisObj = $class->_getRedis($args);
-        my $cursor   = 0;
-        do {
-            my ( $new_cursor, $sets ) =
-              $redisObj->scan( $cursor,
-                MATCH => _exprPattern( $selectField, $value ),
-                COUNT => $SCAN_COUNT );
-            $class->_readSets(
-                $args, $redisObj, $sets, \%res, 1,
-                sub {
-                    $class->_keepMatching( \%res, $_[1], $selectField,
-                        sub { $_[0] =~ $re }, @fields );
-                }
-            );
-            $cursor = $new_cursor;
-        } while ( $cursor != 0 );
+        foreach my $pattern ( _exprPatterns( $selectField, $value ) ) {
+            my $cursor = 0;
+            do {
+                my ( $new_cursor, $sets ) =
+                  $redisObj->scan( $cursor,
+                    MATCH => $pattern,
+                    COUNT => $SCAN_COUNT );
+                $class->_readSets(
+                    $args, $redisObj, $sets, \%res, 1,
+                    sub {
+                        $class->_keepMatching( \%res, $_[1], $selectField,
+                            sub { $_[0] =~ $re }, @fields );
+                    }
+                );
+                $cursor = $new_cursor;
+            } while ( $cursor != 0 );
+        }
     }
     else {
         $class->get_key_from_all_sessions(
@@ -358,8 +379,8 @@ sub _searchCompare {
     }
 
     my $redisObj = $class->_getRedis($args);
-    my $prefix   = "${selectField}_";
-    my $pattern = _globEscape($prefix);
+    my $prefix   = _keyName("${selectField}_");
+    my $pattern = _keyName( _globEscape("${selectField}_") );
     my $cursor = 0;
     do {
         my ( $new_cursor, $sets ) =
@@ -435,7 +456,7 @@ sub deleteIfLowerThan {
                 foreach my $i (@$index) {
                     my $t = $v->{$i};
                     next unless ( defined($t) and length($t) > 0 );
-                    eval { $redisObj->srem( "${i}_$t", $k ) };
+                    eval { $redisObj->srem( _keyName("${i}_$t"), $k ) };
                     if ($@) {
                         warn "Failed to remove '$k' from index '${i}_$t': $@";
                         $index_ok = 0;
@@ -658,6 +679,17 @@ them:
   }
 
 This also refreshes their C<TTL>, if any.
+
+=head1 CHARACTERS ABOVE U+00FF
+
+Redis clients refuse characters above U+00FF. Sessions are stored as JSON
+where such characters (and only them) are written as C<\uXXXX> escapes, so
+they are supported: the stored value is the same as before for a session
+holding only Latin-1 characters. Index set names (C<field_value>) are sent as
+Latin-1 bytes when they can be, so existing sets keep working, and as UTF-8
+bytes otherwise. The name of a value above U+00FF may then be the same as the
+Latin-1 name of another value: searches check the value of each session found,
+so they aren't affected.
 
 =head1 CONCURRENT UPDATES
 
