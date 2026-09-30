@@ -166,8 +166,31 @@ foreach (@tests) {
     my ( $doc, $bind ) = @{ $res->{values} };
     is( encode( 'UTF-8', $doc ), qq{{"k":"$bytes"}},
         'unflagged UTF-8: document bytes' );
-    is( encode( 'UTF-8', $bind ), $bytes,
-        'unflagged UTF-8: recheck bind bytes' );
+    is( $bind, $bytes, 'unflagged UTF-8: recheck bind unchanged' );
+}
+
+# Non-ASCII field and value, as UTF-8 bytes or as characters: the document
+# holds characters in both cases, the recheck keeps the arguments as given
+# and without GinIndex nothing changes
+{
+    my $chars = "caf\x{e9}";
+    my $bytes = encode( 'UTF-8', $chars );
+    foreach my $case ( [ bytes => $bytes ], [ characters => $chars ] ) {
+        my ( $desc, $arg ) = @$case;
+        my $res = $class->_searchOnQuery( $gin, $arg, $arg );
+        my ($doc) = @{ $res->{values} };
+        ok( utf8::is_utf8($doc) || $doc !~ /[\x80-\xff]/, "$desc: characters" );
+        is( encode( 'UTF-8', $doc ),
+            encode( 'UTF-8', qq{{"$chars":"$chars"}} ),
+            "$desc: field and value document" );
+        is( $res->{values}->[-1], $arg, "$desc: recheck bind unchanged" );
+        like( $res->{query}, qr/->> '\Q$arg\E' =\?/, "$desc: recheck field" );
+
+        $res = $class->_searchOnQuery( {}, $arg, $arg );
+        is( $res->{query}, "a_session ->> '$arg' =?",
+            "$desc: no GinIndex query" );
+        is_deeply( $res->{values}, [$arg], "$desc: no GinIndex binds" );
+    }
 }
 
 # "a_session @> ?::jsonb" needs a jsonb column: searchOn() must drop GinIndex
@@ -182,12 +205,15 @@ foreach (@tests) {
     my $json    = bless { type => 'json' },  'FakeDbh';
     my $current = $jsonb;
     my ($seen);
-    local *Apache::Session::Browseable::PgJSON::_classDbh = sub {$current};
-    local *Apache::Session::Browseable::PgJSON::_query =
-      sub { $seen = $_[1]; return $seen };
+    my $connections = 0;
+    local *Apache::Session::Browseable::PgJSON::_classDbh =
+      sub { $connections++; $current };
+    local *Apache::Session::Browseable::PgJSON::_queryDbh =
+      sub { $seen = $_[2]; return $seen };
 
     is( $class->searchOn( { GinIndex => 1 }, 'k', 'v' )->{GinIndex},
         1, 'GinIndex kept on a jsonb column' );
+    is( $connections, 1, 'one handle lookup per searchOn()' );
 
     $current = $json;
     my @warn;
@@ -197,6 +223,18 @@ foreach (@tests) {
     }
     ok( !$seen->{GinIndex}, 'GinIndex dropped on a json column' );
     like( join( '', @warn ), qr/not jsonb/, 'json column warns' );
+
+    # An unknown type (missing table) must not be cached
+    my $missing = bless { type => undef }, 'FakeDbh';
+    $current = $missing;
+    {
+        local $SIG{__WARN__} = sub { };
+        $class->searchOn( { GinIndex => 1, TableName => 'late' }, 'k', 'v' );
+    }
+    $missing->{type} = 'jsonb';
+    is( $class->searchOn( { GinIndex => 1, TableName => 'late' }, 'k', 'v' )
+          ->{GinIndex},
+        1, 'undefined column type is not cached' );
 }
 
 # Patroni inherits this query

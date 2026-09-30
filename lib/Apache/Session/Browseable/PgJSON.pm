@@ -28,11 +28,12 @@ sub populate {
 
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
-    if ( $args->{GinIndex} and !$class->_jsonbColumn($args) ) {
+    my $dbh = $class->_classDbh($args);
+    if ( $args->{GinIndex} and !$class->_jsonbColumn( $args, $dbh ) ) {
         $args = { %$args };
         delete $args->{GinIndex};
     }
-    return $class->_query( $args,
+    return $class->_queryDbh( $dbh, $args,
         $class->_searchOnQuery( $args, $selectField, $value ), @fields );
 }
 
@@ -45,18 +46,6 @@ sub _searchOnQuery {
     ( my $q = $field ) =~ s/'/''/g;
     my $f = "a_session ->> '$q'";
 
-    # A caller may pass the UTF-8 bytes of a non-ASCII value without the UTF-8
-    # flag: to_json() would then read them as Latin-1 and the JSON document
-    # wouldn't match the stored value. Decode them once, here, so that the
-    # document and the recheck use the same characters.
-    if ( defined($value)
-        and !utf8::is_utf8($value)
-        and $value =~ /[\x80-\xff]/ )
-    {
-        my $decoded = $value;
-        $value = $decoded if ( utf8::decode($decoded) );
-    }
-
     # "->>" returns arrays and objects as JSON text; jsonb rejects NUL
     return { query => "$f =?", values => [$value] }
       unless ( $args->{GinIndex}
@@ -64,13 +53,26 @@ sub _searchOnQuery {
         and $value !~ /^[\[{]/
         and "$field$value" !~ /\0/ );
 
+    # A caller may pass the UTF-8 bytes of a non-ASCII field or value without
+    # the UTF-8 flag: to_json() would then read them as Latin-1 and the JSON
+    # document wouldn't match the stored data. Decode copies, used only to
+    # build the documents: the "->>" recheck keeps the arguments as given,
+    # like the query used without GinIndex.
+    my ( $dfield, $dvalue ) = ( $field, $value );
+    for ( $dfield, $dvalue ) {
+        if ( !utf8::is_utf8($_) and /[\x80-\xff]/ ) {
+            my $decoded = $_;
+            $_ = $decoded if ( utf8::decode($decoded) );
+        }
+    }
+
     # Numbers beyond PostgreSQL numeric limits can't be stored in jsonb
     my $literal = $value =~ /^(?:true|false)\z/
       || (  $value =~ /^-?(0|[1-9][0-9]*)(?:\.([0-9]+))?\z/
         and length($1) <= 131072
         and length( $2 // '' ) <= 16383 );
-    my @docs = ( to_json( { $field => "$value" } ) );
-    push @docs, '{' . to_json( "$field", { allow_nonref => 1 } ) . ":$value}"
+    my @docs = ( to_json( { $dfield => "$dvalue" } ) );
+    push @docs, '{' . to_json( "$dfield", { allow_nonref => 1 } ) . ":$value}"
       if ($literal);
     return {
         query => '('
@@ -82,14 +84,15 @@ sub _searchOnQuery {
 
 # The "a_session @> ..." conditions need a jsonb column: with a json column
 # every searchOn() would fail. Look the type up once per handle and table,
-# warn and fall back to the plain query when it is not jsonb.
+# warn and fall back to the plain query when it is not jsonb. An unknown type
+# (table not created yet) isn't cached.
 sub _jsonbColumn {
-    my ( $class, $args ) = @_;
+    my ( $class, $args, $dbh ) = @_;
 
-    my $dbh = $class->_classDbh($args);
+    $dbh ||= $class->_classDbh($args);
     my $table = $args->{TableName} || $Apache::Session::Store::DBI::TableName;
     my $cache = $dbh->{private_asb_pgjson_type} ||= {};
-    unless ( exists $cache->{$table} ) {
+    unless ( defined $cache->{$table} ) {
         ( $cache->{$table} ) = $dbh->selectrow_array(
             q{SELECT t.typname FROM pg_attribute a
                 JOIN pg_type t ON t.oid = a.atttypid
@@ -114,9 +117,15 @@ sub searchOnExpr {
 
 sub _query {
     my ( $class, $args, $query, @fields ) = @_;
+    return $class->_queryDbh( $class->_classDbh($args), $args, $query,
+        @fields );
+}
+
+# Same as _query() with an already connected handle
+sub _queryDbh {
+    my ( $class, $dbh, $args, $query, @fields ) = @_;
     my %res = ();
 
-    my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
 
@@ -307,14 +316,19 @@ sessions storage options):
 searchOn() then adds a C<a_session @E<gt> '{"field":"value"}'> condition, the
 only kind of query this index can serve. The C<@E<gt>> operator and the
 C<jsonb_path_ops> operator class exist only for "jsonb": with a "json"
-column, the index can't be created and searchOn() fails. Convert the column
-first:
+column, the index can't be created: C<GinIndex> is then ignored, with a
+warning, and searchOn() falls back to the query used without the option. The
+warning is emitted once per database handle (so once per process and
+connection) and table. To use the index, convert the column first:
 
   ALTER TABLE sessions ALTER COLUMN a_session TYPE jsonb
     USING a_session::jsonb;
 
-If the column is not "jsonb", C<GinIndex> is ignored: a warning is emitted
-once per table and searchOn() falls back to the query used without the option.
+This rewrites the whole table under an C<ACCESS EXCLUSIVE> lock: sessions are
+blocked during the conversion. It fails if a session contains C<\u0000>
+(accepted by "json", refused by "jsonb"). The column type is cached per
+database handle and table: processes already connected must be restarted (or
+reconnect) after the conversion, else they keep ignoring C<GinIndex>.
 
 Results are the same as without C<GinIndex>:
 
