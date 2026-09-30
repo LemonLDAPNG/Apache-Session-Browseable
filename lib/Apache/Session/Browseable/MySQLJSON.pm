@@ -317,6 +317,10 @@ indexed generated column makes the session storage fail: a string longer than
 the column, or a non integer C<_utime> or C<_lastSeen> value
 (C<cast('1.5' as unsigned)> is an error in this case). Size C<varchar> columns
 generously; Lemonldap::NG always writes integer C<_utime> and C<_lastSeen>.
+These values must be non negative integers: a JSON C<null> (for example
+C<_lastSeen =E<gt> undef>) or a negative number is refused too, since
+C<-E<gt>E<gt>> returns the string C<'null'> (not SQL C<NULL>) and the session
+can't be written anymore. An absent key is fine (the column is C<NULL>).
 
 Generated columns documented by previous versions (using C<-E<gt>>) were
 never used. To fix an existing table, drop those you created:
