@@ -9,7 +9,8 @@ use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::JSON;
 use Apache::Session::Browseable::_common;
 use Net::LDAP::Constant
-  qw(LDAP_CONTROL_PAGED LDAP_NO_SUCH_OBJECT LDAP_ASSERTION_FAILED);
+  qw(LDAP_CONTROL_PAGED LDAP_NO_SUCH_OBJECT LDAP_ASSERTION_FAILED
+  LDAP_UNAVAILABLE_CRITICAL_EXT);
 use Net::LDAP::Control::Assertion;
 use Net::LDAP::Control::Paged;
 use Net::LDAP::Util qw(escape_filter_value);
@@ -277,11 +278,13 @@ sub deleteIfLowerThan {
         last if $msg;
         next if $keep;
 
-        # Don't delete sessions updated since the search
+        # Don't delete sessions updated since the search. The control is
+        # critical: a server ignoring it would delete refreshed sessions
         my $res = $ldap->delete(
             $dn,
             control => [
                 Net::LDAP::Control::Assertion->new(
+                    critical  => 1,
                     assertion =>
                       $class->_lowerThanAssertion( $args, $rule, @values )
                 )
@@ -303,6 +306,9 @@ sub deleteIfLowerThan {
         print STDERR 'deleteIfLowerThan: LDAP error '
           . $msg->code . ': '
           . $msg->error . "\n";
+        print STDERR "deleteIfLowerThan: the server doesn't support the "
+          . "assertion control (RFC 4528), giving up\n"
+          if ( $msg->code == LDAP_UNAVAILABLE_CRITICAL_EXT );
         $ok = 0;
     }
     $ldap->unbind();
@@ -608,7 +614,9 @@ it is kept if its content has the C<not> value.
 
 Each deletion carries an assertion control (RFC 4528) checking that the index
 values seen by the search haven't changed: a session updated in the meantime
-is not deleted. Servers that don't support this control ignore it.
+is not deleted. The control is critical: if the server (or a proxy) doesn't
+support it, the deletion fails with LDAP error 12, and deleteIfLowerThan()
+stops and returns false (see below) so that no refreshed session is deleted.
 
 Limits:
 

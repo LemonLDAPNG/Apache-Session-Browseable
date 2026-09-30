@@ -5,7 +5,7 @@ plan skip_all => "Optional modules (Net::LDAP) not installed"
       require Net::LDAP;
   };
 
-plan tests => 120;
+plan tests => 127;
 
 $package = 'Apache::Session::Browseable::Store::LDAP';
 
@@ -272,7 +272,7 @@ foreach (
     [ [qw(_utime_1790559999.5)],           1, 'decimal' ],
     [ [qw(_utime_abc)],                    0, 'not a number' ],
     [ ['_utime_ 999 '],                    1, 'surrounding spaces' ],
-    [ ['_utime_ 1000 '],                   0, 'equal with spaces' ],
+    [ ['_utime_ 1790560000 '],            0, 'equal with spaces' ],
     [ ['_utime_ abc '],                    0, 'not a number with spaces' ],
     [ [qw(uid_dwho)],                      0, 'no field' ],
     [ [qw(_utime_x_1 _utimex_1)],          0, 'other fields with same prefix' ],
@@ -405,3 +405,63 @@ is( $err, '', '_pagedSearch: partial page without control, no warning' );
         'deleteIfLowerThan: bad rule false in scalar context'
     );
 }
+
+# deleteIfLowerThan: LDAP errors on a mocked connection
+{
+
+    package MockEntry;
+    sub new { my $c = shift; bless [@_], $c }
+    sub dn  { $_[0]->[0] }
+    sub get_value { my $s = shift; @$s[ 1 .. $#$s ] }
+
+    package MockResult;
+    sub new   { bless { code => $_[1] }, $_[0] }
+    sub code  { $_[0]->{code} }
+    sub error { 'mock error' }
+
+    package MockDeleteLDAP;
+    sub new { bless { deletes => [], code => $_[1] }, $_[0] }
+    sub search {
+        my ( $self, %s ) = @_;
+        return MockResult->new( $self->{searchCode} )
+          if ( $s{scope} eq 'base' and $self->{searchCode} );
+        return MockSearchResult->new(
+            [ MockEntry->new( 'cn=a', '_utime_5' ),
+              MockEntry->new( 'cn=b', '_utime_5' ) ]
+        );
+    }
+    sub delete {
+        my ( $self, $dn, %o ) = @_;
+        push @{ $self->{deletes} }, [ $dn, @{ $o{control} } ];
+        return MockResult->new( @{ $self->{deletes} } > 1 ? $self->{code} : 0 );
+    }
+    sub unbind     { }
+    sub disconnect { }
+}
+
+sub mockedDelete {
+    my ( $ldap, $rule, $list ) = @_;
+    no warnings 'redefine';
+    local *Apache::Session::Browseable::Store::LDAP::ldap = sub { $ldap };
+    my ( @r, $err );
+    $err = '';
+    local *STDERR;
+    open STDERR, '>', \$err;
+    my $ok = $list ? [ $browseable->deleteIfLowerThan( { Index => 'uid _utime _session_kind' }, $rule ) ]
+                   : scalar $browseable->deleteIfLowerThan( { Index => 'uid _utime _session_kind' }, $rule );
+    return ( $ok, $err );
+}
+
+# Server without assertion control support: stop, return the deleted count
+my $mock = MockDeleteLDAP->new(12);
+my ( $r, $mockErr ) = mockedDelete( $mock, { or => { _utime => 10 } }, 1 );
+is_deeply( $r, [ 0, 1 ], 'deleteIfLowerThan: critical extension error, ( 0, 1 )' );
+is( scalar @{ $mock->{deletes} }, 2, '... stops at the first failure' );
+like( $mockErr, qr/LDAP error 12/, '... reports the error' );
+like( $mockErr, qr/assertion control/, '... and the missing control' );
+is( scalar( () = $mockErr =~ /assertion control/g ), 1, '... only once' );
+ok( $mock->{deletes}->[0]->[1]->critical, 'Assertion control is critical' );
+
+$mock = MockDeleteLDAP->new(12);
+( $r, $mockErr ) = mockedDelete( $mock, { or => { _utime => 10 } }, 0 );
+is( $r, 0, 'deleteIfLowerThan: critical extension error, false in scalar' );
