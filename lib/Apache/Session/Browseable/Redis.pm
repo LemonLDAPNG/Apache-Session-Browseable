@@ -38,6 +38,9 @@ sub unserialize {
 our $SREM_ORPHAN = q{if redis.call('exists',KEYS[2])==0 then }
   . q{return redis.call('srem',KEYS[1],KEYS[2]) end return 0};
 
+# Keys per SCAN call (a hint for Redis)
+our $SCAN_COUNT = 1000;
+
 our $lua_warned;
 
 # Remove orphan session $k from index set $set. Without Lua (EVAL forbidden by
@@ -140,6 +143,21 @@ sub _exprRe {
     return qr/^$value$/;
 }
 
+# Redis glob escape: MATCH patterns of SCAN must find names literally
+sub _globEscape {
+    my ($s) = @_;
+    $s =~ s/([*?\[\]\\])/\\$1/g;
+    return $s;
+}
+
+# SCAN pattern of the index sets for searchOnExpr(): '*' is the only
+# wildcard of the value. The sessions are checked afterwards with _exprRe()
+sub _exprPattern {
+    my ( $field, $value ) = @_;
+    $value =~ s/([?\[\]\\])/\\$1/g;
+    return _globEscape($field) . "_$value";
+}
+
 # Add decoded sessions whose $selectField matches $test to $res: the index
 # may be stale (concurrent rewrite, missed SREM)
 sub _keepMatching {
@@ -195,7 +213,9 @@ sub searchOnExpr {
         my $cursor   = 0;
         do {
             my ( $new_cursor, $sets ) =
-              $redisObj->scan( $cursor, MATCH => "${selectField}_$value" );
+              $redisObj->scan( $cursor,
+                MATCH => _exprPattern( $selectField, $value ),
+                COUNT => $SCAN_COUNT );
             foreach my $set (@$sets) {
                 my $sessions =
                   $class->_readIndex( $args, $redisObj, $set, \%res, 1 );
@@ -272,11 +292,11 @@ sub _searchCompare {
 
     my $redisObj = $class->_getRedis($args);
     my $prefix   = "${selectField}_";
-    ( my $pattern = $prefix ) =~ s/([*?\[\]\\])/\\$1/g;
+    my $pattern  = _globEscape($prefix);
     my $cursor = 0;
     do {
         my ( $new_cursor, $sets ) =
-          $redisObj->scan( $cursor, MATCH => "$pattern*", COUNT => 1000 );
+          $redisObj->scan( $cursor, MATCH => "$pattern*", COUNT => $SCAN_COUNT );
         foreach my $set (@$sets) {
 
             # Sets of other fields ("${selectField}_x_1") aren't numbers
