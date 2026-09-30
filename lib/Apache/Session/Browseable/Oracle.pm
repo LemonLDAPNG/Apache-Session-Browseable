@@ -34,11 +34,13 @@ sub _quoteColumn {
 
 # Oracle returns unquoted column names (id) in upper case and quoted ones
 # (index columns) in their own case: read them in lower case, then restore
-# the case of the requested fields
+# the case of the requested fields. a_session (CLOB or LONG) is read up to
+# LongReadLen bytes, as Apache::Session::Store::Oracle does
 sub _classDbh {
-    my $class = shift;
-    my $dbh   = $class->SUPER::_classDbh(@_);
+    my ( $class, $args ) = @_;
+    my $dbh = $class->SUPER::_classDbh($args);
     $dbh->{FetchHashKeyName} = 'NAME_lc';
+    $dbh->{LongReadLen}      = $args->{LongReadLen} || 8 * 2**10;
     return $dbh;
 }
 

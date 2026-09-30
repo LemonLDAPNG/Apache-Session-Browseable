@@ -46,6 +46,7 @@ plan skip_all => 'DBI is needed for this test' unless eval { require DBI };
     sub execute {
         my ( $self, @bind ) = @_;
         push @{ $self->{bind} }, @bind;
+        $self->{LongReadLen} = $self->{dbh}->{LongReadLen};
         return 1;
     }
 
@@ -96,6 +97,7 @@ plan skip_all => 'DBI is needed for this test' unless eval { require DBI };
         return \%res;
     }
     sub fetchrow_array    { () }
+    sub fetchrow_arrayref { ['{}'] }
     sub fetchall_arrayref { [] }
     sub finish            { 1 }
 }
@@ -326,6 +328,30 @@ SKIP: {
     my $sth = FakeDbh->new('Oracle')->prepare('SELECT id,"_utime" from t');
     is_deeply( $sth->names, [ 'ID', '_utime' ], 'Mock returns ID' );
     ok( !eval { $sth->fetchall_hashref('id') }, 'Mock: no "id" field' );
+}
+
+# Oracle: a_session is read with LongReadLen, as Apache::Session::Oracle does
+SKIP: {
+    my $class = 'Apache::Session::Browseable::Oracle';
+    skip "$class can't be loaded", 1 unless ( eval "require $class" );
+    no strict 'refs';
+    no warnings 'redefine';
+    local *{'Apache::Session::Browseable::DBI::_classDbh'} =
+      sub { FakeDbh->new('Oracle') };
+    foreach ( [ {}, 8192 ], [ { LongReadLen => 65536 }, 65536 ] ) {
+        my ( $a, $len ) = @$_;
+        is( $class->_classDbh($a)->{LongReadLen},
+            $len, "Oracle: class methods read $len bytes" );
+        my $store = $class->can('populate')->()->{object_store};
+        my $dbh   = FakeDbh->new('Oracle');
+        my $session =
+          { args => { %$a, Handle => $dbh }, data => { _session_id => 's1' } };
+        $store->materialize($session);
+        is( $session->{serialized}, '{}', 'Oracle: session read' );
+        is( $store->{materialize_sth}->{LongReadLen},
+            $len, "Oracle: store reads $len bytes" );
+        ok( !defined $dbh->{LongReadLen}, 'Oracle: LongReadLen restored' );
+    }
 }
 
 done_testing();

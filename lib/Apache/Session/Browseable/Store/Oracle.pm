@@ -20,5 +20,16 @@ sub _quoteColumn {
     return qq{"$field"};
 }
 
+# The materialize() of Apache::Session::Store::DBI comes first in @ISA: set
+# LongReadLen as Apache::Session::Store::Oracle does, else sessions longer
+# than 80 bytes can't be read
+sub materialize {
+    my ( $self, $session ) = @_;
+    $self->connection($session);
+    local $self->{dbh}->{LongReadLen} =
+      $session->{args}->{LongReadLen} || 8 * 2**10;
+    return $self->SUPER::materialize($session);
+}
+
 1;
 
