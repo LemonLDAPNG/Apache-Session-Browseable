@@ -38,6 +38,39 @@ sub unserialize {
 our $SREM_ORPHAN = q{if redis.call('exists',KEYS[2])==0 then }
   . q{return redis.call('srem',KEYS[1],KEYS[2]) end return 0};
 
+our $lua_warned;
+
+# Remove orphan session $k from index set $set. Without Lua (EVAL forbidden by
+# ACL, proxy...), WATCH the session so that a concurrent writer aborts the
+# removal. $k must have been checked with isLlngKey()
+sub _removeOrphan {
+    my ( $class, $redisObj, $set, $k ) = @_;
+    return if ( eval { $redisObj->eval( $SREM_ORPHAN, 2, $set, $k ); 1 } );
+    unless ($lua_warned) {
+        $lua_warned = 1;
+        print STDERR "Redis EVAL failed, orphan index members are removed "
+          . "without Lua: $@\n";
+    }
+    my $err;
+    eval {
+        $redisObj->watch($k);
+        if ( $redisObj->exists($k) ) {
+            $redisObj->unwatch;
+        }
+        else {
+            $redisObj->multi;
+            $redisObj->srem( $set, $k );
+            $redisObj->exec;
+        }
+    };
+    if ($@) {
+        $err = $@;
+        eval { $redisObj->discard };
+        eval { $redisObj->unwatch };
+        print STDERR "Unable to remove '$k' from index $set: $err\n";
+    }
+}
+
 # Keys per MGET: a huge index set must not block Redis with one big command
 our $MGET_BATCH = 500;
 
@@ -86,7 +119,7 @@ sub _readIndex {
         unless ($tmp) {
 
             # Lazy cleanup: remove orphan from index
-            eval { $redisObj->eval( $SREM_ORPHAN, 2, $set, $k ) };
+            $class->_removeOrphan( $redisObj, $set, $k );
             next;
         }
         $tmp = eval { unserialize($tmp) };
