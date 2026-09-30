@@ -160,6 +160,17 @@ parties have a refresh token activity timeout: sessions purge then calls
 searchLt() on C<_oidcRtUpdate>, which reads all sessions unless this field is
 in C<Index>.
 
+Sessions created before this column and its C<Index> entry were added keep a
+NULL value until they are written again, so searchLt() never finds them (and
+the Lemonldap::NG refresh token purge skips them). Backfill the column, see
+L<Apache::Session::Browseable/"ADDING A COLUMN TO Index ON AN EXISTING TABLE">.
+Example, with the JSON serializer:
+
+  UPDATE sessions
+      SET _oidcRtUpdate = (a_session::json->>'_oidcRtUpdate')::bigint
+      WHERE _oidcRtUpdate IS NULL
+        AND a_session::json->>'_oidcRtUpdate' IS NOT NULL;
+
 Use it with Perl:
 
   use Apache::Session::Browseable::Postgres;

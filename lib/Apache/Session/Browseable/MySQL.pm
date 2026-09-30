@@ -84,6 +84,16 @@ every session write fail. First create the column and its index:
 then backfill it (see L<Apache::Session::Browseable/"ADDING A COLUMN TO Index ON AN EXISTING TABLE">)
 and only then add C<_lastSeen> to C<Index>.
 
+Sessions created before this column and its C<Index> entry were added keep a
+NULL value until they are written again, so searchLt() never finds them (and
+the Lemonldap::NG refresh token purge skips them). Backfill the column, see
+L<Apache::Session::Browseable/"ADDING A COLUMN TO Index ON AN EXISTING TABLE">.
+Example, with the JSON serializer:
+
+  UPDATE sessions
+      SET _oidcRtUpdate = JSON_UNQUOTE(JSON_EXTRACT(a_session, '$._oidcRtUpdate'))
+      WHERE _oidcRtUpdate IS NULL;
+
 Searches must be exact (case and accent sensitive). Text columns listed in
 C<Index> must use the C<utf8mb4_bin> collation: otherwise, searches on indexed
 fields follow the table collation (case and accent insensitive with
