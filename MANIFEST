@@ -44,6 +44,7 @@ t/Apache-Session-Browseable-Cassandra.t
 t/Apache-Session-Browseable-common.t
 t/Apache-Session-Browseable-DBI.t
 t/Apache-Session-Browseable-File.t
+t/Apache-Session-Browseable-LDAP-server.t
 t/Apache-Session-Browseable-LDAP.t
 t/Apache-Session-Browseable-Patroni.t
 t/Apache-Session-Browseable-Redis.t

@@ -13,7 +13,7 @@ Module::Build->new(
     },
     recommends => {
         'DBI'                 => 0,
-        'Net::LDAP'           => 0.38,
+        'Net::LDAP'           => 0.44,
         'IO::Socket::Timeout' => 0,
         'Authen::SASL'        => 0,
         'DBD::Cassandra'      => 0,
