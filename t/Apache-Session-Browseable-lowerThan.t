@@ -20,6 +20,7 @@ use Test::More;
 
     package FakeSth;
     sub execute { return 1 }
+
     sub fetchall_arrayref {
         return [
             [ '_utime',    "JSON_VALUE(a_session, '\$._utime')" ],
@@ -74,18 +75,6 @@ foreach (@tests) {
     }
 }
 
-# MySQLJSON must build the same expression without a database handle
-foreach (@tests) {
-    my ( $backend, $field, $expected ) = @$_;
-    next unless ( $backend eq 'MySQLJSON' );
-    my $class = "Apache::Session::Browseable::$backend";
-  SKIP: {
-        skip "$class can't be loaded", 1 unless ( eval "require $class" );
-        is( $class->_buildLowerThanExpression( $field, 200 ),
-            $expected, "$backend: $field without database handle" );
-    }
-}
-
 # _utf8() must convert both UTF-8 and Latin-1 byte strings (searched values or
 # field names read without decoding) to the same character
 foreach my $backend (qw(MySQLJSON MariaDBJSON)) {
@@ -97,6 +86,36 @@ foreach my $backend (qw(MySQLJSON MariaDBJSON)) {
         is( $utf8,   "\x{e9}", "$backend: _utf8 decodes UTF-8 bytes" );
         is( $latin1, "\x{e9}", "$backend: _utf8 keeps Latin-1 bytes" );
     }
+}
+
+# JSON backends must build the same expression without a database handle
+foreach (@tests) {
+    my ( $backend, $field, $expected, $args ) = @$_;
+    next unless ( $backend =~ /^(?:MySQLJSON|MariaDBJSON)\z/ );
+
+    # MariaDBJSON can't check the generated columns without a handle: it reads
+    # indexed fields from the JSON document (see the next test)
+    next if ( $args and $backend eq 'MariaDBJSON' );
+    my $class = "Apache::Session::Browseable::$backend";
+  SKIP: {
+        skip "$class can't be loaded", 1 unless ( eval "require $class" );
+        is(
+            $class->_buildLowerThanExpression( $field, 200, undef, $args ),
+            $expected,
+            "$backend: $field without database handle"
+              . ( $args ? ' (indexed)' : '' )
+        );
+    }
+}
+
+SKIP: {
+    my $class = 'Apache::Session::Browseable::MariaDBJSON';
+    skip "$class can't be loaded", 1 unless ( eval "require $class" );
+    is(
+        $class->_buildLowerThanExpression( '_utime', 200, undef, $index ),
+        q{cast(JSON_VALUE(a_session, '$._utime') as UNSIGNED) < 200},
+        'MariaDBJSON: indexed field without database handle uses JSON_VALUE'
+    );
 }
 
 done_testing();

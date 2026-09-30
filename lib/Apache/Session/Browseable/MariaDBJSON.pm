@@ -42,11 +42,11 @@ sub _classDbh {
 
 # Indexed fields are read from the generated column of the same name: MariaDB
 # doesn't always use the index of a generated column when a query contains
-# its expression
+# its expression. Fields whose column is not usable are read from the JSON
+# document like the other ones
 sub _sqlField {
     my ( $class, $dbh, $field, $args ) = @_;
-    if ( $args and $class->_fieldIsIndexed( $args, $field ) ) {
-        $class->_checkIndex( $dbh, $args );
+    if ( $class->_useColumn( $dbh, $field, $args ) ) {
         my ($f) = $class->_utf8($field);
         $f =~ s/`/``/g;
         return "`$f`";
@@ -54,45 +54,58 @@ sub _sqlField {
     return 'JSON_VALUE(a_session, ' . $class->_sqlPath( $dbh, $field ) . ')';
 }
 
+# True if $field is listed in Index and has a usable generated column
+sub _useColumn {
+    my ( $class, $dbh, $field, $args ) = @_;
+    return 0 unless ( $args and $class->_fieldIsIndexed( $args, $field ) );
+    my $valid = $class->_checkIndex( $dbh, $args ) or return 0;
+    my ($f) = $class->_utf8($field);
+    return $valid->{$f} ? 1 : 0;
+}
+
 # Indexed fields are read from a generated column: a column that exists but
 # is not generated (for example left over from a migration from
-# Browseable::MySQL, where the store wrote real columns) stays NULL, so
-# searches and purge silently return nothing. Check it once per handle,
-# table and Index list
+# Browseable::MySQL, where the store wrote real columns) stays NULL. Check
+# the columns once per handle, table and Index list. Returns the hash
+# reference of the fields that can be read from their column (empty without
+# database handle)
 sub _checkIndex {
     my ( $class, $dbh, $args ) = @_;
+    return {} unless ($dbh);
     my $index =
       ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
-    return unless (@$index);
+    my @index = $class->_utf8( grep { defined and length } @$index );
+    return {} unless (@index);
 
     my $table = $args->{TableName} || $Apache::Session::Store::DBI::TableName;
 
     # DBI only keeps private_* attributes
     my $checked = $dbh->{private_asb_mariadbjson_index} ||= {};
-    my $key = join "\0", $table, @$index;
-    return if ( $checked->{$key} );
+    my $key = join "\0", $table, @index;
+    return $checked->{$key} if ( $checked->{$key} );
 
     my $sth = $dbh->prepare(
         'SELECT COLUMN_NAME, GENERATION_EXPRESSION'
           . ' FROM information_schema.COLUMNS'
           . ' WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?'
           . ' AND COLUMN_NAME IN ('
-          . join( ',', ('?') x @$index ) . ')' );
-    $sth->execute( $table, @$index );
+          . join( ',', ('?') x @index ) . ')' );
+    $sth->execute( $table, @index );
     my %expr = map { $_->[0] => $_->[1] } @{ $sth->fetchall_arrayref };
     $sth->finish;
 
-    my @unusable;
-    foreach my $field (@$index) {
-        next
-          if ( defined( $expr{$field} )
-            and $expr{$field} =~ /\ba_session\b/ );
+    my ( %valid, @unusable );
+    foreach my $field (@index) {
+        if ( defined( $expr{$field} ) and $expr{$field} =~ /\ba_session\b/ ) {
+            $valid{$field} = 1;
+            next;
+        }
         my $why = exists( $expr{$field} )
           ? 'it exists but is not generated from a_session'
           : 'there is no column with this name';
         push @unusable, "\"$field\" ($why)";
     }
-    $checked->{$key} = 1;
+    $checked->{$key} = \%valid;
 
     # Warn rather than die: the lookup compares names between Perl and
     # information_schema, which can fail on an exotic name encoding even when
@@ -100,17 +113,17 @@ sub _checkIndex {
     warn "Apache::Session::Browseable::MariaDBJSON: unusable Index field(s) in"
       . " table $table: "
       . join( ', ', @unusable )
-      . ". Searches on them would silently return nothing; add a generated"
-      . " column based on a_session (see the documentation)\n"
+      . ". They are read from the JSON document, which is slower; add a"
+      . " generated column based on a_session (see the documentation)\n"
       if (@unusable);
-    return;
+    return \%valid;
 }
 
 # No CAST for indexed fields: it would prevent the use of the index
 sub _buildLowerThanExpression {
     my ( $class, $field, $value, $dbh, $args ) = @_;
     return $class->_sqlField( $dbh, $field, $args ) . " < $value"
-      if ( $args and $class->_fieldIsIndexed( $args, $field ) );
+      if ( $class->_useColumn( $dbh, $field, $args ) );
     return $class->SUPER::_buildLowerThanExpression( $field, $value, $dbh );
 }
 
@@ -196,9 +209,10 @@ C<id> and C<a_session>.
 
 A column listed in C<Index> that exists but is not generated from
 C<a_session> - for example one left over from a migration from
-L<Apache::Session::Browseable::MySQL>, which wrote real columns - stays NULL,
-so searches on it silently return nothing. This module checks C<Index> once
-per database handle and warns about such fields.
+L<Apache::Session::Browseable::MySQL>, which wrote real columns - stays NULL.
+This module checks C<Index> once per database handle, warns about such fields
+(and about missing columns) and reads them from the JSON document like fields
+that are not listed in C<Index>: results are the same, only slower.
 
 =item *
 

@@ -13,6 +13,11 @@ plan skip_all => "$class can't be loaded"
         my ( $class, %o ) = @_;
         return bless { rows => $o{rows} || [], prepares => 0 }, $class;
     }
+    sub quote {
+        my ( $self, $s ) = @_;
+        $s =~ s/'/''/g;
+        return "'$s'";
+    }
     sub prepare {
         my ($self) = @_;
         $self->{prepares}++;
@@ -30,6 +35,13 @@ plan skip_all => "$class can't be loaded"
         return $self->{dbh}->{rows};
     }
     sub finish { return 1 }
+}
+
+# Column usage: $class->_useColumn() and _sqlField()
+sub usage {
+    my ( $dbh, $args, $field ) = @_;
+    local $SIG{__WARN__} = sub { };
+    return $class->_useColumn( $dbh, $field, $args );
 }
 
 # Returns the exception (if any) and the warnings
@@ -53,6 +65,8 @@ is( $warn, '', 'no warning for a generated column' );
 is( $dbh->{prepares}, 1, 'one information_schema query' );
 check( $dbh, $args );
 is( $dbh->{prepares}, 1, 'result is memoized' );
+is_deeply( $class->_checkIndex( $dbh, $args ),
+    { uid => 1 }, 'validated fields are returned' );
 ok( $dbh->{private_asb_mariadbjson_index},
     'memoized on a DBI private attribute' );
 check( $dbh, { %$args, Index => 'uid lastSeen' } );
@@ -86,5 +100,44 @@ my $multi = FakeDbh->new(
 ( $err, $warn ) =
   check( $multi, { Index => 'uid lastSeen', TableName => 's' } );
 like( $warn, qr/"lastSeen"/, 'every Index field is checked' );
+
+# Only validated fields are read from their column, the other ones (and
+# fields that are not in Index) from the JSON document
+my $col = q{`uid`};
+my $json = q{JSON_VALUE(a_session, '$.uid')};
+$dbh = FakeDbh->new(
+    rows => [
+        [ 'uid',      "JSON_VALUE(a_session, '\$.uid')" ],
+        [ 'lastSeen', undef ],
+    ]
+);
+$args = { Index => 'uid lastSeen', TableName => 's' };
+ok( usage( $dbh, $args, 'uid' ), 'validated field uses its column' );
+ok( !usage( $dbh, $args, 'lastSeen' ), 'stale column is not used' );
+ok( !usage( $dbh, $args, 'other' ),    'field out of Index is not used' );
+is( $class->_sqlField( $dbh, 'uid', $args ), $col, '_sqlField: column' );
+like(
+    $class->_sqlField( $dbh, 'lastSeen', $args ),
+    qr/^JSON_VALUE\(a_session, '\$\.lastSeen'\)\z/,
+    '_sqlField: stale column replaced by JSON_VALUE'
+);
+is( $class->_buildLowerThanExpression( 'uid', 200, $dbh, $args ),
+    "$col < 200", 'lowerThan on a validated column: no cast' );
+is(
+    $class->_buildLowerThanExpression( 'lastSeen', 200, $dbh, $args ),
+    q{cast(JSON_VALUE(a_session, '$.lastSeen') as UNSIGNED) < 200},
+    'lowerThan on a stale column: JSON_VALUE with cast'
+);
+
+# Missing column
+$dbh = FakeDbh->new( rows => [] );
+ok( !usage( $dbh, { Index => 'uid', TableName => 's' }, 'uid' ),
+    'missing column is not used' );
+( $err, $warn ) = check( FakeDbh->new, { Index => 'uid', TableName => 's' } );
+like( $warn, qr/read from the JSON document/, 'warning describes the fallback' );
+unlike( $warn, qr/silently/, 'no misleading text' );
+
+# Without handle nothing can be checked
+is_deeply( $class->_checkIndex( undef, $args ), {}, 'no handle: nothing valid' );
 
 done_testing();
