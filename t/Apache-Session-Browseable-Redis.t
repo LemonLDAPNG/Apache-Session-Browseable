@@ -266,6 +266,7 @@ ok( !$r->sismember( "uid_ghost", $id_empty ),
 my %session_nols;
 tie %session_nols, $package, undef, $args;
 $session_nols{uid} = 'nolastseen';
+$session_nols{_utime} = time;
 my $id_nols = $session_nols{_session_id};
 untie %session_nols;
 
