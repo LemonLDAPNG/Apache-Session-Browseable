@@ -11,7 +11,8 @@ plan skip_all => "$class can't be loaded"
     package FakeDbh;
     sub new {
         my ( $class, %o ) = @_;
-        return bless { rows => $o{rows} || [], prepares => 0 }, $class;
+        return bless { rows => $o{rows} || [], prepares => 0, sql => [] },
+          $class;
     }
     sub quote {
         my ( $self, $s ) = @_;
@@ -21,6 +22,7 @@ plan skip_all => "$class can't be loaded"
     sub prepare {
         my ($self) = @_;
         $self->{prepares}++;
+        push @{ $self->{sql} }, $_[1];
         return FakeSth->new($self);
     }
 
@@ -29,7 +31,11 @@ plan skip_all => "$class can't be loaded"
         my ( $class, $dbh ) = @_;
         return bless { dbh => $dbh }, $class;
     }
-    sub execute { return 1 }
+    sub execute {
+        my ( $self, @bind ) = @_;
+        $self->{dbh}->{bind} = \@bind;
+        return 1;
+    }
     sub fetchall_arrayref {
         my ($self) = @_;
         return $self->{dbh}->{rows};
@@ -136,6 +142,30 @@ ok( !usage( $dbh, { Index => 'uid', TableName => 's' }, 'uid' ),
 ( $err, $warn ) = check( FakeDbh->new, { Index => 'uid', TableName => 's' } );
 like( $warn, qr/read from the JSON document/, 'warning describes the fallback' );
 unlike( $warn, qr/silently/, 'no misleading text' );
+
+# TableName may contain the schema; empty names (leading spaces in Index) are
+# ignored
+my $row = [ 'uid', "JSON_VALUE(a_session, '\$.uid')" ];
+$dbh = FakeDbh->new( rows => [$row] );
+check( $dbh, { Index => ' uid', TableName => 'lldap.sessions' } );
+is_deeply( $dbh->{bind}, [ 'lldap', 'sessions', 'uid' ],
+    'schema.table is split, empty field ignored' );
+unlike( $dbh->{sql}->[0], qr/DATABASE\(\)/,
+    'given schema replaces DATABASE()' );
+$dbh = FakeDbh->new( rows => [$row] );
+check( $dbh, { Index => 'uid', TableName => '`lldap`.`sessions`' } );
+is_deeply( $dbh->{bind}, [ 'lldap', 'sessions', 'uid' ],
+    'backquotes are removed' );
+$dbh = FakeDbh->new( rows => [$row] );
+check( $dbh, { Index => 'uid', TableName => 'sessions' } );
+is_deeply( $dbh->{bind}, [ 'sessions', 'uid' ], 'plain table name' );
+like( $dbh->{sql}->[0], qr/DATABASE\(\)/, 'current database used' );
+$dbh = FakeDbh->new( rows => [$row] );
+is_deeply(
+    $class->_checkIndex( $dbh, { Index => ' uid  ', TableName => 's' } ),
+    { uid => 1 },
+    'leading and trailing spaces in Index'
+);
 
 # Without handle nothing can be checked
 is_deeply( $class->_checkIndex( undef, $args ), {}, 'no handle: nothing valid' );

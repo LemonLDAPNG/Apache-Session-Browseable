@@ -84,13 +84,22 @@ sub _checkIndex {
     my $key = join "\0", $table, @index;
     return $checked->{$key} if ( $checked->{$key} );
 
+    # TableName may be "schema.table", with or without backquotes
+    my ( $schema, $name ) = ( undef, $table );
+    if ( $table =~ /^`?([^`.]+)`?\.`?([^`.]+)`?\z/ ) {
+        ( $schema, $name ) = ( $1, $2 );
+    }
+    else {
+        $name =~ s/`//g;
+    }
+
     my $sth = $dbh->prepare(
         'SELECT COLUMN_NAME, GENERATION_EXPRESSION'
-          . ' FROM information_schema.COLUMNS'
-          . ' WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?'
-          . ' AND COLUMN_NAME IN ('
+          . ' FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '
+          . ( defined $schema ? '?' : 'DATABASE()' )
+          . ' AND TABLE_NAME = ? AND COLUMN_NAME IN ('
           . join( ',', ('?') x @index ) . ')' );
-    $sth->execute( $table, @index );
+    $sth->execute( ( defined $schema ? $schema : () ), $name, @index );
     my %expr = map { $_->[0] => $_->[1] } @{ $sth->fetchall_arrayref };
     $sth->finish;
 
