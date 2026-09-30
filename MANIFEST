@@ -47,6 +47,7 @@ t/Apache-Session-Browseable-File.t
 t/Apache-Session-Browseable-LDAP.t
 t/Apache-Session-Browseable-MySQL.t
 t/Apache-Session-Browseable-MySQLJSON.t
+t/Apache-Session-Browseable-Oracle.t
 t/Apache-Session-Browseable-Patroni.t
 t/Apache-Session-Browseable-PgHstore.t
 t/Apache-Session-Browseable-PgJSON.t
@@ -62,3 +63,4 @@ t/Apache-Session-Browseable-Store-Patroni.t
 t/lib/SQLBackendTests.pm
 t/test-browseable-functions-using-File.t
 t/test-browseable-functions-using-SQLite.t
+t/test-oracle-functions-using-SQLite.t
