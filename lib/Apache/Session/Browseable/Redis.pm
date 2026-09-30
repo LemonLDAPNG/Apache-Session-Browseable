@@ -19,11 +19,16 @@ sub populate {
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
     $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
-    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serializeLatin1;
     $self->{unserialize} =
       \&Apache::Session::Serialize::JSON::unserializeLatin1;
 
     return $self;
+}
+
+# Key name sent to Redis, see Store::Redis::keyName()
+sub _keyName {
+    return Apache::Session::Browseable::Store::Redis::keyName(@_);
 }
 
 sub unserialize {
