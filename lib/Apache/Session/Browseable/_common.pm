@@ -25,6 +25,43 @@ sub _fieldIsIndexed {
     return ( grep { $_ eq $field } @$index );
 }
 
+# Identifier (table or column name) inserted into an SQL query. It is quoted
+# with the driver's quote_identifier() when the driver supports it the
+# standard way. PostgreSQL folds unquoted names to lower case, so tables and
+# columns created without quotes have lower case names: the name is
+# lowercased before being quoted, which keeps the previous behaviour for
+# names in mixed case (TableName => 'Sessions' still finds "sessions"). A
+# "schema.table" name is quoted part by part, and a name that already
+# contains quotes is left unchanged. Other drivers (Oracle, Sybase,
+# Informix...) get the name as before: quoting would change its case or
+# meaning there
+sub _quoteIdentifier {
+    my ( $class, $dbh, $name ) = @_;
+    my $driver = $dbh->{Driver}->{Name};
+    unless ( $driver =~ /^(?:Pg|mysql|MariaDB|SQLite)\z/ ) {
+        $name =~ s/'/''/g;
+        return $name;
+    }
+    return $name      if ( $name =~ /["`]/ );
+    $name = lc($name) if ( $driver eq 'Pg' );
+    return join '.', map { $dbh->quote_identifier($_) } split /\./, $name, -1;
+}
+
+# Column of an indexed field in SQL queries. Callers check Index with the
+# field name, then insert the result of this method: backends that need
+# another quoting override it
+sub _quoteColumn {
+    my ( $class, $dbh, $field ) = @_;
+    return $class->_quoteIdentifier( $dbh, $field );
+}
+
+# Quoted table name, see _quoteIdentifier()
+sub _tableName {
+    my ( $class, $dbh, $args ) = @_;
+    return $class->_quoteIdentifier( $dbh,
+        $args->{TableName} || $Apache::Session::Store::DBI::TableName );
+}
+
 1;
 __END__
 

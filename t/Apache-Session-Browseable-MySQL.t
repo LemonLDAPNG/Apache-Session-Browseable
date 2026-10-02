@@ -10,10 +10,12 @@ run_tests(
     create => [
             'CREATE TABLE __TABLE__ (id varchar(64) not null primary key,'
           . ' a_session text, uid varchar(64), _whatToTrace varchar(64),'
-          . ' _session_kind varchar(64), _utime bigint, _lastSeen bigint)'
+          . ' _session_kind varchar(64), _utime bigint, _lastSeen bigint,'
+          . ' `order` varchar(64))'
     ],
-    index => 'uid _whatToTrace _session_kind _utime _lastSeen',
-    todo  => {
+    index    => 'uid _whatToTrace _session_kind _utime _lastSeen order',
+    reserved => 'order',
+    todo     => {
         searchOnExprQuote => 'quotes are doubled although the value is bound',
         deleteNot       => 'sessions without the "not" field are never deleted',
         deleteAndNot    => 'sessions without the "not" field are never deleted',
