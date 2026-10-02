@@ -16,7 +16,7 @@ plan skip_all => "Redis error : $@"
     $r->flushall();
   };
 
-plan tests => 57;
+plan tests => 65;
 
 $package = 'Apache::Session::Browseable::Redis';
 
@@ -313,5 +313,28 @@ $hash = $package->searchOnExpr( $args, 'uid', 'expr_*' );
 is( keys %$hash, 0, "searchOnExpr returns nothing for expired session" );
 ok( !$r->sismember( "uid_expr_test", $id_lz3 ),
     "searchOnExpr lazy cleanup removed orphan lz3 from index" );
+
+# A member that isn't a string or a corrupted session is skipped and kept
+my ( $hashKey, $junk ) = ( 'e' x 64, 'd' x 64 );
+$r->hset( $hashKey, a => 'b' );
+$r->set( $junk, 'not a session' );
+$r->sadd( 'uid_alive', $hashKey, $junk );
+$r->set( 'uid_notaset', 'x' );
+foreach my $m (qw(searchOn searchOnExpr)) {
+    my $err = '';
+    {
+        local *STDERR;
+        open STDERR, '>', \$err;
+        $hash = eval {
+            $package->$m( $args, 'uid', $m eq 'searchOn' ? 'alive' : 'al*' );
+        };
+    }
+    is( $@, '', "$m doesn't die on a hash member or a corrupted session" );
+    is_deeply( [ keys %$hash ], [$id_lz1], "$m skips them" );
+    ok( $r->sismember( 'uid_alive', $hashKey ), "$m kept the hash member" );
+}
+$hash = eval { $package->searchOn( $args, 'uid', 'notaset' ) };
+is( $@, '', "searchOn doesn't die on an index that isn't a set" );
+is_deeply( $hash, {}, 'searchOn: index that isn\'t a set ignored' );
 
 $r->flushall;
