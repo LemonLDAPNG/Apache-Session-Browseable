@@ -3,8 +3,8 @@ package SQLBackendTests;
 # Common tests for SQL backends, run only if <env>_DSN is set (credentials
 # are read from <env>_USER and <env>_PASSWORD). Parameters:
 #  - class:   Apache::Session::Browseable class to test
-#  - driver:  DBD driver name (Pg, mysql)
-#  - env:     environment variables prefix (PG, MYSQL)
+#  - driver:  DBD driver name (Pg, mysql, Oracle)
+#  - env:     environment variables prefix (PG, MYSQL, ORACLE)
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
 #  - index:   indexed fields (DBI based backends, one column per field)
@@ -37,7 +37,17 @@ sub run_tests {
         $ENV{"$o{env}_PASSWORD"},
         { RaiseError => 1, PrintError => 0, PrintWarn => 0, AutoCommit => 1 }
     );
-    $dbh->do("DROP TABLE IF EXISTS $table");
+
+    # Oracle < 23 has no DROP TABLE IF EXISTS
+    my $drop = sub {
+        if ( $o{driver} eq 'Oracle' ) {
+            eval { $dbh->do("DROP TABLE $table") };
+        }
+        else {
+            $dbh->do("DROP TABLE IF EXISTS $table");
+        }
+    };
+    $drop->();
     foreach ( @{ $o{create} } ) {
         ( my $sql = $_ ) =~ s/__TABLE__/$table/g;
         $dbh->do($sql);
@@ -436,7 +446,7 @@ sub run_tests {
         );
     }
 
-    $dbh->do("DROP TABLE IF EXISTS $table");
+    $drop->();
     $dbh->disconnect;
     done_testing();
 }
