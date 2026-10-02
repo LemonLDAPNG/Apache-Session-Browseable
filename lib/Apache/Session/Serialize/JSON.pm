@@ -6,10 +6,21 @@ use JSON qw(to_json from_json);
 
 our $VERSION = '1.2.6';
 
+my $latin1Json = JSON->new->latin1->allow_nonref;
+
 sub serialize {
     my $session = shift;
 
     $session->{serialized} = to_json( $session->{data}, { allow_nonref => 1 } );
+}
+
+# For stores that can only hold Latin-1 bytes (Redis): characters above U+00FF
+# are written as \uXXXX escapes, so the result can always be downgraded
+sub serializeLatin1 {
+    my $session = shift;
+
+    $session->{serialized} = $latin1Json->encode( $session->{data} );
+    return $session->{serialized};
 }
 
 sub unserialize {
@@ -55,6 +66,13 @@ This module fulfills the serialization interface of Apache::Session.
 It serializes the data in the session object by use of JSON C<to_json>
 and C<from_json>. The serialized data is UTF-8 text.
 
+
+Redis clients refuse characters above U+00FF. Redis therefore writes sessions
+with C<serializeLatin1()>: characters above U+00FF (surrogate pairs above
+U+FFFF) are escaped as C<\uXXXX> and the others are kept, so the result can
+always be downgraded to Latin-1 bytes. For a session holding only Latin-1
+characters, it is the same string as C<serialize()>. C<unserialize()> reads
+the escapes back as the original characters.
 
 =head1 SEE ALSO
 
