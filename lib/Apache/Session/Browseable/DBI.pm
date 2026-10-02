@@ -171,7 +171,7 @@ sub get_key_from_all_sessions {
         if ($indexed) {
             my $sth =
               $dbh->prepare_cached( 'SELECT id,'
-                  . join( ',', map { s/'/''/g; $_ } @$data )
+                  . join( ',', map { ( my $f = $_ ) =~ s/'/''/g; $f } @$data )
                   . " from $table_name" );
             $sth->execute;
             return $sth->fetchall_hashref('id');
