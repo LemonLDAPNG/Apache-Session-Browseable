@@ -8,8 +8,11 @@ run_tests(
     env    => 'PG',
     table  => 'asb_test_pgjson',
     create => [
-'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session jsonb)'
+'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session jsonb)',
+        'CREATE INDEX __TABLE___gin ON __TABLE__'
+          . ' USING GIN (a_session jsonb_path_ops)',
     ],
+    gin  => 1,
     todo => {
         deleteAnd      => '"and" rules are built from the "or" hash',
         deleteNot      => 'sessions without the "not" field are never deleted',
