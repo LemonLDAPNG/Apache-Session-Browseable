@@ -12,7 +12,6 @@ run_tests(
     ],
     todo => {
         searchOnData   => 'session data is not decoded',
-        searchOnFields => 'field names are returned lower-cased',
         gkfasArray     => 'the query does not select the id column',
         gkfasField     => 'the query does not select the id column',
         deleteAnd      => '"and" rules are built from the "or" hash',
