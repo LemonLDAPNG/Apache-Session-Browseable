@@ -1,7 +1,6 @@
 package Apache::Session::Browseable::Store::Redis;
 
 use strict;
-use JSON qw(decode_json);
 
 our $VERSION = '1.3.18';
 
@@ -55,23 +54,39 @@ sub update {
       ? $session->{args}->{Index}
       : [ split /\s+/, $session->{args}->{Index} ];
 
-    my $id = $session->{data}->{_session_id};
+    my $id  = $session->{data}->{_session_id};
+    my $ttl = $session->{args}->{TTL};
+
+    # Nothing to clean up without index
+    unless (@$index) {
+        if ($ttl) {
+            $self->{cache}->set( $id, $session->{serialized}, 'EX', $ttl );
+        }
+        else {
+            $self->{cache}->set( $id, $session->{serialized} );
+        }
+        return;
+    }
 
     # Read old data to clean up stale index entries
     my $old_raw = eval { $self->{cache}->get($id) };
     if ($@) {
         warn "Failed to read previous session '$id' from Redis: $@";
     }
+    # Decode it like the session itself: Redis returns Latin-1, not UTF-8
     my $old_data;
     if ( defined $old_raw && length $old_raw ) {
-        $old_data = eval { decode_json($old_raw) };
+        my $old = { serialized => $old_raw };
+        eval { $session->{unserialize}->($old) };
         if ($@) {
             warn "Failed to decode previous session '$id': $@";
+        }
+        else {
+            $old_data = $old->{data};
         }
     }
 
     # Store new data
-    my $ttl = $session->{args}->{TTL};
     if ($ttl) {
         $self->{cache}->set( $id, $session->{serialized}, 'EX', $ttl );
     }
