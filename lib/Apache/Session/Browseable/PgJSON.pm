@@ -101,10 +101,14 @@ sub deleteIfLowerThan {
           keys %{ $rule->{or} };
     }
     if ( $rule->{not} ) {
-        $query = "($query) AND "
-          . join( ' AND ',
-            map { "a_session ->> '$_' <> '$rule->{not}->{$_}'" }
-              keys %{ $rule->{not} } );
+        $query = "($query) AND " . join(
+            ' AND ',
+            map {
+                my $f = "a_session ->> '$_'";
+                "($f IS NULL OR $f <> '$rule->{not}->{$_}')"
+              }
+              keys %{ $rule->{not} }
+        );
     }
     return 0 unless ($query);
     my $dbh        = $class->_classDbh($args);

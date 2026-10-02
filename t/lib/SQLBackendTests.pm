@@ -8,6 +8,7 @@ package SQLBackendTests;
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
 #  - index:   indexed fields (DBI based backends, one column per field)
+#  - null:    1 if a field can be stored as JSON null (JSON backends)
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
@@ -354,6 +355,40 @@ sub run_tests {
             is( $rule->{not}->{uid}, "O'Brien", 'Rule is not modified' );
         }
     );
+
+    # A field stored as JSON null does not protect a session
+    if ( $o{null} ) {
+        $group->(
+            deleteNull => sub {
+                $reset->();
+                my $nullId =
+                  $newSession->( %{ $data{dwho} }, _session_kind => undef );
+                my $json =
+                  $dbh->selectrow_array(
+                    "SELECT a_session FROM $table WHERE id=?",
+                    undef, $nullId );
+                like(
+                    $json,
+                    qr/"_session_kind"\s*:\s*null/,
+                    'Session with a JSON null field created'
+                );
+                my @r = $class->deleteIfLowerThan(
+                    $args,
+                    {
+                        or  => { _utime        => 200 },
+                        not => { _session_kind => 'SSO' }
+                    }
+                );
+                is_deeply(
+                    \@r,
+                    [ 1, 3 ],
+                    'deleteIfLowerThan "not": JSON null deleted'
+                );
+                is( $remaining->(), 'dwho,obrien',
+                    'deleteIfLowerThan "not": right sessions kept' );
+            }
+        );
+    }
 
     $dbh->do("DROP TABLE IF EXISTS $table");
     $dbh->disconnect;

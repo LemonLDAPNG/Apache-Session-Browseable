@@ -119,7 +119,7 @@ sub deleteIfLowerThan {
             map {
                 $rule->{not}->{$_} =~ s/'/''/g;
                 $fields{$_}++;
-                "$_ <> '$rule->{not}->{$_}'"
+                "($_ IS NULL OR $_ <> '$rule->{not}->{$_}')"
               }
               keys %{ $rule->{not} }
         );
