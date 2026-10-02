@@ -131,6 +131,40 @@ sub searchOnExpr {
     return \%res;
 }
 
+# Decide if a session must be purged. Like Lemonldap::NG's generic purge,
+# only a missing _utime means "expired": any other missing field is not lower
+# than the threshold (so a session without _lastSeen is not purged by it).
+sub _isDominated {
+    my ( $class, $v, $rule ) = @_;
+
+    # Empty or data-less sessions should be purged
+    return 1 if ( !$v || !%$v || !exists $v->{_session_id} );
+    if ( $rule->{or} ) {
+        foreach ( keys %{ $rule->{or} } ) {
+            if ( !defined( $v->{$_} ) ) {
+
+                # Session without _utime: treat as expired
+                return 1 if $_ eq '_utime';
+                next;
+            }
+            return 1 if $v->{$_} < $rule->{or}->{$_};
+        }
+    }
+    elsif ( $rule->{and} ) {
+        foreach ( keys %{ $rule->{and} } ) {
+            if ( !defined( $v->{$_} ) ) {
+
+                # Only a missing _utime counts as lower
+                return 0 unless $_ eq '_utime';
+                next;
+            }
+            return 0 unless $v->{$_} < $rule->{and}->{$_};
+        }
+        return 1;
+    }
+    return 0;
+}
+
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
     my $deleted  = 0;
@@ -151,33 +185,7 @@ sub deleteIfLowerThan {
                     }
                 }
             }
-            # Empty or data-less sessions should be purged
-            my $dominated = 0;
-            if ( !$v || !%$v || !exists $v->{_session_id} ) {
-                $dominated = 1;
-            }
-            elsif ( $rule->{or} ) {
-                foreach ( keys %{ $rule->{or} } ) {
-                    if ( !defined( $v->{$_} ) ) {
-                        # Session missing a required field: treat as expired
-                        $dominated = 1;
-                        last;
-                    }
-                    if ( $v->{$_} < $rule->{or}->{$_} ) {
-                        $dominated = 1;
-                        last;
-                    }
-                }
-            }
-            elsif ( $rule->{and} ) {
-                my $res = 1;
-                foreach ( keys %{ $rule->{and} } ) {
-                    $res = 0
-                      unless !defined( $v->{$_} )
-                      or $v->{$_} < $rule->{and}->{$_};
-                }
-                $dominated = $res;
-            }
+            my $dominated = $class->_isDominated( $v, $rule );
             if ($dominated) {
                 # Clean up index entries before deleting the session
                 my $index_ok = 1;
