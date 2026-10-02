@@ -56,17 +56,35 @@ sub _query {
 
     my $sth;
     my $fields =
-      join( ',', 'id', map { s/'//g; qq(a_session->>"\$.$_" AS $_) } @fields );
+      @fields
+      ? join( ',', 'id', map { s/'//g; qq(a_session->>"\$.$_" AS $_) } @fields )
+      : 'id,a_session';
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
     $sth->execute( @{ $query->{values} } );
 
     # In this case, PostgreSQL change field name in lowercase
     my $res = $sth->fetchall_hashref('id') or return {};
-    foreach (@fields) {
-        if ( $_ ne lc($_) ) {
-            foreach my $s ( keys %$res ) {
-                $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ };
+    if (@fields) {
+        foreach (@fields) {
+            if ( $_ ne lc($_) ) {
+                foreach my $s ( keys %$res ) {
+                    $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ };
+                }
+            }
+        }
+    }
+    else {
+        my $self = eval "&${class}::populate();";
+        my $sub  = $self->{unserialize};
+        foreach my $s ( keys %$res ) {
+            eval {
+                my $tmp = &$sub( { serialized => $res->{$s}->{a_session} } );
+                $res->{$s} = $tmp;
+            };
+            if ($@) {
+                print STDERR "Error in session $s: $@\n";
+                delete $res->{$s};
             }
         }
     }
