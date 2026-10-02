@@ -82,6 +82,24 @@ is provided so that this module will not have adverse interactions with your
 local transaction policy, nor your local database handle caching policy.  The
 argument is mandatory in order to make you think about this problem.
 
+=head2 searchLt() and searchGt()
+
+searchLt() and searchGt() take the same arguments and return the same data as
+searchOn(): sessions whose field is lower (or greater) than the given value,
+which is excluded. The value must be a number (C<12>, C<-12> or C<12.5>):
+otherwise nothing is returned and an error is printed on STDERR. Spaces
+around the value are ignored.
+
+Fields listed in C<Index> are compared in SQL as integers
+(C<cast(field as integer)>), other fields in Perl after reading all sessions.
+Both compare a non-numeric value as 0, or as its numeric prefix, but SQL keeps
+only an integer prefix: C<12.7> is 12 and C<1e3> is 1 in SQL, whereas Perl
+compares 12.7 and 1000. Store integers in indexed fields to get the same
+results.
+
+Sessions without the field are never returned, whereas the Perl fallback of
+Lemonldap::NG compares a missing field as 0.
+
 =head1 AUTHOR
 
 This module was written by Xavier Guimard <x.guimard@free.fr> using

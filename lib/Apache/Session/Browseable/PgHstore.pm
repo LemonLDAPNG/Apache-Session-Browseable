@@ -5,6 +5,7 @@ use strict;
 use Apache::Session;
 use Apache::Session::Lock::Null;
 use Apache::Session::Browseable::Store::Postgres;
+use Apache::Session::Browseable::_common;
 use Apache::Session::Generate::SHA256;
 use Apache::Session::Serialize::Hstore;
 
@@ -27,19 +28,44 @@ sub populate {
 
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
-    $selectField =~ s/'/''/g;
     my $query =
-      { query => "a_session -> '$selectField' =?", values => [$value] };
+      { query => $class->_sqlField($selectField) . ' =?', values => [$value] };
     return $class->_query( $args, $query, @fields );
 }
 
 sub searchOnExpr {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
-    $selectField =~ s/'/''/g;
-    $value       =~ s/\*/%/g;
-    my $query =
-      { query => "a_session -> '$selectField' like ?", values => [$value] };
+    $value =~ s/\*/%/g;
+    my $query = {
+        query  => $class->_sqlField($selectField) . ' like ?',
+        values => [$value]
+    };
     return $class->_query( $args, $query, @fields );
+}
+
+sub searchLt {
+    my $class = shift;
+    return $class->_searchCompare( '<', @_ );
+}
+
+sub searchGt {
+    my $class = shift;
+    return $class->_searchCompare( '>', @_ );
+}
+
+# $value is checked, then inserted like deleteIfLowerThan() thresholds: bound,
+# it would be typed bigint and decimal values would fail
+sub _searchCompare {
+    my ( $class, $op, $args, $selectField, $value, @fields ) = @_;
+    $value =
+      Apache::Session::Browseable::_common->_checkSearchValue( $op, $value );
+    return {} unless ( defined $value );
+    my $query = {
+        query  => $class->_buildCompareExpression( $selectField, $op, $value ),
+        values => []
+    };
+    return Apache::Session::Browseable::_common->_searchQuery( $op,
+        sub { $class->_query( $args, $query, @fields ) } );
 }
 
 sub _query {
@@ -53,26 +79,17 @@ sub _query {
     my $sth;
     my $fields =
       @fields
-      ? join( ',', 'id', map { s/'//g; "a_session -> '$_' AS $_" } @fields )
+      ? join( ',',
+        'id',
+        map { $class->_sqlField($_) . ' AS ' . $class->_sqlAlias($_) } @fields )
       : '*';
     $sth =
       $dbh->prepare("SELECT $fields from $table_name where $query->{query}");
     $sth->execute( @{ $query->{values} } );
 
-    # In this case, PostgreSQL change field name in lowercase
     my $res = $sth->fetchall_hashref('id') or return {};
-    if (@fields) {
-        foreach (@fields) {
-            if ( $_ ne lc($_) ) {
-                foreach my $s ( keys %$res ) {
-                    $res->{$s}->{$_} = delete $res->{$s}->{ lc $_ };
-                }
-            }
-        }
-    }
-    else {
-        my $self = eval "&${class}::populate();";
-        my $sub  = $self->{unserialize};
+    unless (@fields) {
+        my $sub = Apache::Session::Browseable::_common::_unserializer($class);
         foreach my $s ( keys %$res ) {
             eval {
                 my $tmp = &$sub( { serialized => $res->{$s}->{a_session} } );
@@ -89,28 +106,34 @@ sub _query {
 
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
-    my $query;
+    my ( $query, @bind );
+    return wantarray ? ( 0, 0 ) : 0
+      unless ( Apache::Session::Browseable::_common->_checkThresholds($rule) );
     if ( $rule->{or} ) {
         $query = join ' OR ',
-          map { "cast(a_session -> '$_' as bigint) < $rule->{or}->{$_}" }
+          map { $class->_buildLowerThanExpression( $_, $rule->{or}->{$_} ) }
           keys %{ $rule->{or} };
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ',
-          map { "cast(a_session -> '$_' as bigint) < $rule->{or}->{$_}" }
+          map { $class->_buildLowerThanExpression( $_, $rule->{or}->{$_} ) }
           keys %{ $rule->{or} };
     }
     if ( $rule->{not} ) {
-        $query = "($query) AND "
-          . join( ' AND ',
-            map { "a_session -> '$_' <> '$rule->{not}->{$_}'" }
-              keys %{ $rule->{not} } );
+        $query = "($query) AND " . join(
+            ' AND ',
+            map {
+                push @bind, $rule->{not}->{$_};
+                $class->_sqlField($_) . ' <> ?'
+              }
+              keys %{ $rule->{not} }
+        );
     }
     return 0 unless ($query);
     my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do("DELETE FROM $table_name WHERE $query");
+    my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
     return 0 unless defined $rows;
 
     if (wantarray) {
@@ -133,32 +156,69 @@ sub get_key_from_all_sessions {
     # Special case if all wanted fields are indexed
     if ( $data and ref($data) ne 'CODE' ) {
         $data = [$data] unless ( ref($data) );
-        my $fields = join ',', map { s/'//g; "a_session -> '$_' AS $_" } @$data;
+        my $fields = join ',',
+          map { $class->_sqlField($_) . ' AS ' . $class->_sqlAlias($_) } @$data;
         $sth = $dbh->prepare("SELECT $fields from $table_name");
         $sth->execute;
         return $sth->fetchall_hashref('id');
     }
-    $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
-    $sth->execute;
     my %res;
-    while ( my @row = $sth->fetchrow_array ) {
-        no strict 'refs';
-        my $self = eval "&${class}::populate();";
-        my $sub  = $self->{unserialize};
-        my $tmp  = &$sub( { serialized => $row[1] } );
-        if ( ref($data) eq 'CODE' ) {
-            $tmp = &$data( $tmp, $row[0] );
-            $res{ $row[0] } = $tmp if ( defined($tmp) );
+    my $sub = Apache::Session::Browseable::_common::_unserializer($class);
+    Apache::Session::Browseable::_common->_forEachSession(
+        $dbh,
+        $table_name,
+        sub {
+            my @row = @_;
+            my $tmp = &$sub( { serialized => $row[1] } );
+            if ( ref($data) eq 'CODE' ) {
+                $tmp = &$data( $tmp, $row[0] );
+                $res{ $row[0] } = $tmp if ( defined($tmp) );
+            }
+            elsif ($data) {
+                $data = [$data] unless ( ref($data) );
+                $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
+            }
+            else {
+                $res{ $row[0] } = $tmp;
+            }
         }
-        elsif ($data) {
-            $data = [$data] unless ( ref($data) );
-            $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
-        }
-        else {
-            $res{ $row[0] } = $tmp;
-        }
-    }
+    );
     return \%res;
+}
+
+sub _buildLowerThanExpression {
+    my ( $class, $field, $value ) = @_;
+    return $class->_buildCompareExpression( $field, '<', $value );
+}
+
+# Must match the documented expression indexes (_utime, _lastSeen). $op is
+# "<" or ">", $value a number checked by the caller
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value ) = @_;
+    Apache::Session::Browseable::_common->_checkOp($op);
+    my $f = $class->_sqlField($field);
+    return "cast($f as bigint) $op $value";
+}
+
+# Build SQL expression to get a field from a_session
+sub _sqlField {
+    my ( $class, $field ) = @_;
+
+    # With standard_conforming_strings=off, backslashes are escape characters
+    # in plain literals: use an escape string literal in this case
+    if ( $field =~ /\\/ ) {
+        $field =~ s/(['\\])/$1$1/g;
+        return "a_session -> E'$field'";
+    }
+    $field =~ s/'/''/g;
+    return "a_session -> '$field'";
+}
+
+# Build a column alias that preserves field name case
+sub _sqlAlias {
+    my ( $class, $field ) = @_;
+    $field =~ s/"/""/g;
+    return qq{"$field"};
 }
 
 sub _classDbh {
@@ -193,15 +253,36 @@ Create table:
 
   CREATE UNLOGGED TABLE sessions (
       id varchar(64) not null primary key,
-      a_session hstore,
+      a_session hstore
   );
 
 Optionally, add indexes on some fields. Example for Lemonldap::NG:
 
-  CREATE INDEX uid1 ON sessions USING BTREE ( (a_session -> '_whatToTrace') );
+  CREATE INDEX uid1 ON sessions USING BTREE
+    ( (a_session -> '_whatToTrace') text_pattern_ops );
   CREATE INDEX  s1  ON sessions ( (a_session -> '_session_kind') );
   CREATE INDEX  u1  ON sessions ( ( cast(a_session -> '_utime' AS bigint) ) );
-  CREATE INDEX ip1  ON sessions USING BTREE ( (a_session -> 'ipAddr') );
+  CREATE INDEX ls1  ON sessions
+    ( ( cast(a_session -> '_lastSeen' AS bigint) ) );
+  CREATE INDEX rt1  ON sessions
+    ( ( cast(a_session -> '_oidcRtUpdate' AS bigint) ) );
+  CREATE INDEX ip1  ON sessions USING BTREE
+    ( (a_session -> 'ipAddr') text_pattern_ops );
+
+searchOnExpr() uses C<LIKE 'prefix%'> queries: unless the database uses the
+"C" collation, PostgreSQL can't use a plain btree index for them. The
+C<text_pattern_ops> operator class lets the same index serve both C<=> and
+prefix C<LIKE> searches. Note that a search starting with a C<*> wildcard can
+never use a btree index.
+
+deleteIfLowerThan() can use C<u1> and C<ls1> indexes only if they are declared
+exactly as above. C<ls1> is needed when Lemonldap::NG "timeoutActivity" is
+used: sessions purge then deletes sessions whose C<_utime> B<or> C<_lastSeen>
+is too old, and an C<OR> with a non indexed side forces a full table scan.
+
+C<rt1> is useful when OpenID Connect relying parties have a refresh token
+activity timeout: sessions purge then calls searchLt() on C<_oidcRtUpdate>,
+which can use this index only if it is declared exactly as above.
 
 Use it like L<Apache::Session::Browseable::Postgres> except that you don't
 need to declare indexes
@@ -213,6 +294,30 @@ sessions and add the capability to index some fields to make research faster.
 
 Apache::Session::Browseable::PgHstore implements it for PosqtgreSQL databases
 using "hstore" extension to be able to browse sessions.
+
+=head2 searchLt() and searchGt()
+
+  # Sessions whose _utime is lower than $time
+  my $hash = Apache::Session::Browseable::PgHstore->searchLt( $args,
+      '_utime', $time, 'uid' );
+
+searchLt() and searchGt() take the same arguments and return the same data as
+searchOn(): sessions whose field is lower (or greater) than the given value,
+which is excluded. The value must be a number (C<12>, C<-12> or C<12.5>):
+otherwise nothing is returned and an error is printed on STDERR. Spaces
+around the value are ignored.
+
+Fields are compared in SQL as deleteIfLowerThan() does
+(C<cast(a_session -E<gt> 'field' AS bigint)>): an expression index declared
+exactly as C<u1> or C<rt1> above is used with an integer value. As for
+deleteIfLowerThan(), the query fails if it reads a session where this field
+is not an integer: searchLt() and searchGt() then return nothing and print the
+error on STDERR.
+
+Sessions without the field are never returned. This differs from the Perl
+fallback of Lemonldap::NG, where a missing field is compared as 0: searchLt()
+would then return nearly all sessions. Lemonldap::NG doesn't need them: its
+sessions purge ignores sessions without C<_oidcRtUpdate>.
 
 =head1 SEE ALSO
 

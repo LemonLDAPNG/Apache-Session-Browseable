@@ -19,6 +19,14 @@ sessions and add the capability to index some fields to make research faster.
 It has been written to increase performances of LemonLDAP::NG. Read the
 chosen module documentation carefully to set the indexes.
 
+=head1 BATCH SIZE
+
+get_key_from_all_sessions() reads sessions by batches. The number of sessions
+read per query is set by the
+C<$Apache::Session::Browseable::_common::BatchSize> package variable (1000 by
+default). A value that is not an integer between 1 and 1,000,000 is ignored
+and falls back to the default.
+
 =head1 AVAILABLE MODULES
 
 =head2 SQL databases
@@ -45,6 +53,9 @@ manage connection using Patroni API to find master node of PostgreSQL cluster
 =item L<Apache::Session::Browseable::MySQL>: for MySQL and MariaDB
 
 =item L<Apache::Session::Browseable::MySQLJSON>: for MySQL only, uses "json" field
+
+=item L<Apache::Session::Browseable::MariaDBJSON>: for MariaDB only, uses
+"json" field and generated columns
 
 =back
 

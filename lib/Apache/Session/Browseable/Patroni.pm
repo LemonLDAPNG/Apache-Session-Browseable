@@ -34,17 +34,13 @@ for L<Apache::Session::Browseable::PgJSON>
 
 =head1 SYNOPSIS
 
+Create table and indexes as for L<Apache::Session::Browseable::PgJSON> (see
+its documentation for the recommended indexes and their exact expressions):
+
   CREATE UNLOGGED TABLE sessions (
       id varchar(64) not null primary key,
-      a_session jsonb,
+      a_session jsonb
   );
-
-Optionally, add indexes on some fields. Example for Lemonldap::NG:
-
-  CREATE INDEX uid1 ON sessions USING BTREE ( (a_session ->> '_whatToTrace') );
-  CREATE INDEX  s1  ON sessions ( (a_session ->> '_session_kind') );
-  CREATE INDEX  u1  ON sessions ( ( cast(a_session ->> '_utime' AS bigint) ) );
-  CREATE INDEX ip1  ON sessions USING BTREE ( (a_session ->> 'ipAddr') );
 
 Use it with Perl:
 
@@ -82,6 +78,8 @@ Apache::Session::Browseable::Patroni implements it for PostgreSQL databases
 using "json" or "jsonb" type to be able to browse sessions and is able to dial
 directly with Patroni API to find the master node of PostgreSQL cluster in
 case of error.
+
+searchLt() and searchGt() work as in L<Apache::Session::Browseable::PgJSON>.
 
 =head2 Resilience features
 

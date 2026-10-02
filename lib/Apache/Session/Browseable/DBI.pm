@@ -41,6 +41,50 @@ sub searchOnExpr {
     }
 }
 
+sub searchLt {
+    my $class = shift;
+    return $class->_searchCompare( '<', @_ );
+}
+
+sub searchGt {
+    my $class = shift;
+    return $class->_searchCompare( '>', @_ );
+}
+
+# Sessions without the field are skipped, also when it is compared in Perl
+# (fields not listed in Index). $value is checked, then inserted like
+# deleteIfLowerThan() thresholds: bound, it would take the type of the cast
+# (bigint in PostgreSQL) and decimal values would fail
+sub _searchCompare {
+    my ( $class, $op, $args, $selectField, $value, @fields ) = @_;
+    $value = $class->_checkSearchValue( $op, $value );
+    return {} unless ( defined $value );
+
+    # Escape quotes as in searchOn(): _fieldIsIndexed() and the query must
+    # test the same name
+    my $field = $selectField;
+    $field =~ s/'/''/g;
+    unless ( $class->_fieldIsIndexed( $args, $field ) ) {
+        return $class->_searchByTest(
+            $args,
+            $selectField,
+            sub {
+                defined( $_[0] )
+                  and ( $op eq '<' ? $_[0] < $value : $_[0] > $value );
+            },
+            @fields
+        );
+    }
+    my $query = $class->_buildCompareExpression( $field, $op, $value );
+    return $class->_searchQuery(
+        $op,
+        sub {
+            $class->_query( $args, $field, $value,
+                { query => $query, values => [] }, @fields );
+        }
+    );
+}
+
 sub _query {
     my ( $class, $args, $selectField, $value, $query, @fields ) = @_;
     my %res = ();
@@ -70,10 +114,8 @@ sub _query {
           $dbh->prepare(
             "SELECT id,a_session from $table_name where $query->{query}");
         $sth->execute( @{ $query->{values} } );
+        my $sub = $class->_unserializer;
         while ( my @row = $sth->fetchrow_array ) {
-            no strict 'refs';
-            my $self = eval "&${class}::populate();";
-            my $sub  = $self->{unserialize};
             eval {
                 my $tmp = &$sub( { serialized => $row[1] } );
                 if (@fields) {
@@ -94,11 +136,12 @@ sub _query {
 
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
-    my ( $query, %fields );
+    my ( $query, %fields, @bind );
     my $index =
       ref( $args->{Index} )
       ? $args->{Index}
       : [ split /\s+/, $args->{Index} ];
+    return wantarray ? ( 0, 0 ) : 0 unless ( $class->_checkThresholds($rule) );
     if ( $rule->{or} ) {
         $query = join ' OR ', map {
             $fields{$_}++;
@@ -117,9 +160,9 @@ sub deleteIfLowerThan {
         $query = "($query) AND " . join(
             ' AND ',
             map {
-                $rule->{not}->{$_} =~ s/'/''/g;
                 $fields{$_}++;
-                "$_ <> '$rule->{not}->{$_}'"
+                push @bind, $rule->{not}->{$_};
+                "$_ <> ?"
               }
               keys %{ $rule->{not} }
         );
@@ -129,7 +172,7 @@ sub deleteIfLowerThan {
     my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do("DELETE FROM $table_name WHERE $query");
+    my $rows = $dbh->do( "DELETE FROM $table_name WHERE $query", undef, @bind );
     return 0 unless defined $rows;
 
     if (wantarray) {
@@ -141,10 +184,19 @@ sub deleteIfLowerThan {
     }
 }
 
-# Let specialized modules override this syntax if they need to
+# Overriding this only changes deleteIfLowerThan(): searchLt() and searchGt()
+# use _buildCompareExpression()
 sub _buildLowerThanExpression {
-    my ( $class, $field, $value ) = @_;
-    return "cast($field as integer) < $value";
+    my ( $class, $field, $value, @args ) = @_;
+    return $class->_buildCompareExpression( $field, '<', $value, @args );
+}
+
+# Let specialized modules override this syntax if they need to. $op is "<" or
+# ">", $value a number checked by the caller
+sub _buildCompareExpression {
+    my ( $class, $field, $op, $value ) = @_;
+    $class->_checkOp($op);
+    return "cast($field as integer) $op $value";
 }
 
 sub get_key_from_all_sessions {
@@ -177,8 +229,6 @@ sub get_key_from_all_sessions {
             return $sth->fetchall_hashref('id');
         }
     }
-    my $sth = $dbh->prepare_cached("SELECT id,a_session from $table_name");
-    $sth->execute;
     my %res;
     my $next = (
         $args->{DataSource} =~ /^sybase/i
@@ -193,29 +243,32 @@ sub get_key_from_all_sessions {
           }
         : undef
     );
-    while ( my @row = $sth->fetchrow_array ) {
-        no strict 'refs';
-        my $self = eval "&${class}::populate();";
-        eval {
-            my $sub = $self->{unserialize};
-            my $tmp = &$sub( { serialized => $row[1] }, $next );
-            if ( ref($data) eq 'CODE' ) {
-                $tmp = &$data( $tmp, $row[0] );
-                $res{ $row[0] } = $tmp if ( defined($tmp) );
+    my $sub = $class->_unserializer;
+    $class->_forEachSession(
+        $dbh,
+        $table_name,
+        sub {
+            my @row = @_;
+            eval {
+                my $tmp = &$sub( { serialized => $row[1] }, $next );
+                if ( ref($data) eq 'CODE' ) {
+                    $tmp = &$data( $tmp, $row[0] );
+                    $res{ $row[0] } = $tmp if ( defined($tmp) );
+                }
+                elsif ($data) {
+                    $data = [$data] unless ( ref($data) );
+                    $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
+                }
+                else {
+                    $res{ $row[0] } = $tmp;
+                }
+            };
+            if ($@) {
+                print STDERR "Error in session $row[0]: $@\n";
+                delete $res{ $row[0] };
             }
-            elsif ($data) {
-                $data = [$data] unless ( ref($data) );
-                $res{ $row[0] }->{$_} = $tmp->{$_} foreach (@$data);
-            }
-            else {
-                $res{ $row[0] } = $tmp;
-            }
-        };
-        if ($@) {
-            print STDERR "Error in session $row[0]: $@\n";
-            delete $res{ $row[0] };
         }
-    }
+    );
     return \%res;
 }
 
