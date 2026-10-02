@@ -51,6 +51,12 @@ sub searchOn {
             }
             eval {
                 $tmp = unserialize($tmp);
+
+                # The index may be stale or shared with another field
+                # ("a_b" + "c" and "a" + "b_c" give the same set name)
+                return
+                  unless ( defined $tmp->{$selectField}
+                    and $tmp->{$selectField} eq $value );
                 if (@fields) {
                     $res{$k}->{$_} = $tmp->{$_} foreach (@fields);
                 }
@@ -86,15 +92,40 @@ sub searchOn {
     return \%res;
 }
 
+# searchOnExpr() patterns: '*' is a wildcard
+sub _exprRe {
+    my ($value) = @_;
+    $value = quotemeta($value);
+    $value =~ s/\\\*/\.\*/g;
+    return qr/^$value$/;
+}
+
+# Redis glob escape: MATCH patterns of SCAN must find names literally
+sub _globEscape {
+    my ($s) = @_;
+    $s =~ s/([*?\[\]\\])/\\$1/g;
+    return $s;
+}
+
+# SCAN pattern of the index sets for searchOnExpr(): '*' is the only
+# wildcard of the value. The sessions are checked afterwards with _exprRe()
+sub _exprPattern {
+    my ( $field, $value ) = @_;
+    $value =~ s/([?\[\]\\])/\\$1/g;
+    return _globEscape($field) . "_$value";
+}
+
 sub searchOnExpr {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
     my %res;
+    my $re = _exprRe($value);
     if ( $class->isIndexed( $args, $selectField ) ) {
         my $redisObj = $class->_getRedis($args);
         my $cursor   = 0;
         do {
             my ( $new_cursor, $sets ) =
-              $redisObj->scan( $cursor, MATCH => "${selectField}_$value" );
+              $redisObj->scan( $cursor,
+                MATCH => _exprPattern( $selectField, $value ) );
             foreach my $set (@$sets) {
                 next unless $redisObj->type($set) eq 'set';
                 my @keys = $redisObj->smembers($set);
@@ -106,7 +137,12 @@ sub searchOnExpr {
                         next;
                     }
                     my $tmp = unserialize($v);
-                    if ($tmp) {
+
+                    # The pattern may match sets of another field
+                    if (    $tmp
+                        and defined $tmp->{$selectField}
+                        and $tmp->{$selectField} =~ $re )
+                    {
                         $res{$k} = $class->extractFields( $tmp, @fields );
                     }
                 }
@@ -115,14 +151,11 @@ sub searchOnExpr {
         } while ( $cursor != 0 );
     }
     else {
-        $value = quotemeta($value);
-        $value =~ s/\\\*/\.\*/g;
-        $value = qr/^$value$/;
         $class->get_key_from_all_sessions(
             $args,
             sub {
                 my ( $entry, $id ) = @_;
-                return undef unless ( $entry->{$selectField} =~ $value );
+                return undef unless ( $entry->{$selectField} =~ $re );
                 $res{$id} = $class->extractFields( $entry, @fields );
                 undef;
             }
