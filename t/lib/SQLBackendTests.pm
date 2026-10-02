@@ -8,6 +8,7 @@ package SQLBackendTests;
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
 #  - index:   indexed fields (DBI based backends, one column per field)
+#  - corrupt: a_session value that can't be unserialized
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
@@ -354,6 +355,27 @@ sub run_tests {
             is( $rule->{not}->{uid}, "O'Brien", 'Rule is not modified' );
         }
     );
+
+    # Corrupted session must not break listing
+    if ( $o{corrupt} ) {
+        $group->(
+            corrupt => sub {
+                $reset->();
+                $dbh->do(
+                    "INSERT INTO $table (id,a_session) VALUES ('corrupt',?)",
+                    undef, $o{corrupt} );
+                my $res;
+                {
+                    local *STDERR;
+                    my $err = '';
+                    open STDERR, '>', \$err;
+                    $res = $class->get_key_from_all_sessions($args);
+                }
+                is( $name->($res), 'dwho,nokind,obrien,rtyler',
+                    'get_key_from_all_sessions skips corrupted session' );
+            }
+        );
+    }
 
     $dbh->do("DROP TABLE IF EXISTS $table");
     $dbh->disconnect;
