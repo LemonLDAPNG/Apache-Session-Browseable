@@ -143,6 +143,7 @@ sub run_tests {
     foreach my $v ( "\x{c9}lodie", "\x{c9}lodie \x{3a9}" ) {
         ( my $l = $v ) =~ s/[^ -~]/?/g;
         my $u8 = $newSession->( uid => 'u8', cn => $v, list => [$v] );
+        my %session;
         my $check = sub {
             my ($step) = @_;
             tie %session, $class, $u8, $args;
@@ -153,10 +154,20 @@ sub run_tests {
             is( $r->{$u8}->{cn}, $v, "get_key_from_all_sessions returns $l$step" );
             $r = $class->get_key_from_all_sessions( $args, sub { $_[0]->{cn} } );
             is( $r->{$u8}, $v, "get_key_from_all_sessions with a code ref: $l$step" );
-            $r = $class->get_key_from_all_sessions( $args, ['cn'] );
-            is( $r->{$u8}->{cn}, $v, "get_key_from_all_sessions with fields: $l$step" );
-            $r = $class->searchOn( $args, 'uid', 'u8' );
-            is( $r->{$u8}->{cn}, $v, "searchOn without fields returns $l$step" );
+            $group->(
+                gkfasArray => sub {
+                    my $r = $class->get_key_from_all_sessions( $args, ['cn'] );
+                    is( $r->{$u8}->{cn}, $v,
+                        "get_key_from_all_sessions with fields: $l$step" );
+                }
+            );
+            $group->(
+                searchOnData => sub {
+                    my $r = $class->searchOn( $args, 'uid', 'u8' );
+                    is( $r->{$u8}->{cn}, $v,
+                        "searchOn without fields returns $l$step" );
+                }
+            );
             $r = $class->searchOn( $args, 'uid', 'u8', 'cn' );
             is( $r->{$u8}->{cn}, $v, "searchOn with fields returns $l$step" );
         };
