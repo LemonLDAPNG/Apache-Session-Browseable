@@ -256,6 +256,23 @@ sub run_tests {
         }
     );
 
+    $group->(
+        callerArray => sub {
+            my $fields = [ 'uid', "x'y" ];
+            {
+                local *STDERR;
+                my $err = '';
+                open STDERR, '>', \$err;
+                eval { $class->get_key_from_all_sessions( $args, $fields ) };
+            }
+            is_deeply(
+                $fields,
+                [ 'uid', "x'y" ],
+                'Array ref with a quote is not modified'
+            );
+        }
+    );
+
     # deleteIfLowerThan
     $group->(
         delete => sub {
