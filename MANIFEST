@@ -59,3 +59,4 @@ t/Apache-Session-Browseable-Store-Patroni.t
 t/lib/SQLBackendTests.pm
 t/test-browseable-functions-using-File.t
 t/test-browseable-functions-using-SQLite.t
+t/test-sql-functions-using-SQLite.t
