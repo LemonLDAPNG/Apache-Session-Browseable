@@ -16,6 +16,7 @@ use strict;
 use warnings;
 use Test::More;
 use Exporter 'import';
+use Scalar::Util qw(refaddr);
 
 our @EXPORT = qw(run_tests);
 our $TODO;
@@ -108,6 +109,13 @@ sub run_tests {
     my $remaining = sub {
         return $name->( $class->get_key_from_all_sessions($args) );
     };
+    my $quiet = sub {
+        my ($code) = @_;
+        local *STDERR;
+        my $err = '';
+        open STDERR, '>', \$err;
+        return $code->();
+    };
 
     # Run a group of tests. If the group is a known bug of this backend, run
     # it as TODO: STDERR is silenced and a die is reported as a failure
@@ -136,6 +144,83 @@ sub run_tests {
             untie %session;
         }
     );
+
+    # Connection reuse (default) and "noreuse" option
+    {
+        my $rargs = $args;
+        my $dbhOf = sub { tied( %{ $_[0] } )->{object_store}->{dbh} };
+        my %s;
+        tie %s, $class, undef, $rargs;
+        $s{$_} = $data{dwho}->{$_} foreach ( keys %{ $data{dwho} } );
+        my $rid  = $s{_session_id};
+        my $rdbh = $dbhOf->( \%s );
+        untie %s;
+        ok( $rdbh->{Active}, 'reuse: connection kept at untie' );
+
+        tie %s, $class, $rid, { %$args, noreuse => 1 };
+        my $ndbh = $dbhOf->( \%s );
+        untie %s;
+        isnt( refaddr($ndbh), refaddr($rdbh), 'noreuse: new handle' );
+        ok( !$ndbh->{Active}, 'noreuse: connection closed at untie' );
+
+        tie %s, $class, $rid, $rargs;
+        is( refaddr( $dbhOf->( \%s ) ), refaddr($rdbh),
+            'reuse: handle reused' );
+        is( $s{mail}, 'dwho@badwolf.org', 'reuse: session retrieved' );
+        $s{mail} = 'reuse@badwolf.org';
+        untie %s;
+        tie %s, $class, $rid, { %$args, noreuse => 1 };
+        is( $s{mail}, 'reuse@badwolf.org', 'reuse: update committed' );
+        untie %s;
+
+        # Without Commit, the transaction ends at untie: rolled back if
+        # AutoCommit is off, which releases the row locked by the write
+        tie %s, $class, $rid, { %$rargs, Commit => 0 };
+        my $autoCommit = $dbhOf->( \%s )->{AutoCommit};
+        $s{mail} = 'rollback@badwolf.org';
+        untie %s;
+        $dbh->do(
+            $o{driver} eq 'Pg'
+            ? "SET lock_timeout = '5s'"
+            : 'SET SESSION innodb_lock_wait_timeout = 5'
+        );
+        ok(
+            eval {
+                $dbh->do(
+                    "UPDATE $table SET a_session = a_session WHERE id = ?",
+                    undef, $rid );
+                1;
+            },
+            'reuse: row not locked after untie'
+        ) or diag $@;
+        $dbh->do('RESET lock_timeout') if ( $o{driver} eq 'Pg' );
+        tie %s, $class, $rid, $args;
+        is(
+            $s{mail},
+            $autoCommit ? 'rollback@badwolf.org' : 'reuse@badwolf.org',
+            'reuse: Commit => 0 commits only with AutoCommit'
+        );
+        untie %s;
+
+        # A failed operation (which aborts a PostgreSQL transaction) doesn't
+        # break the next ones
+        $quiet->(
+            sub {
+                eval {
+                    tie %s, $class, undef,
+                      { %$rargs, TableName => "${table}_missing" };
+                };
+            }
+        );
+        tie %s, $class, $rid, $rargs;
+        is( refaddr( $dbhOf->( \%s ) ),
+            refaddr($rdbh), 'reuse: handle reused after a failure' );
+        is( $s{uid}, 'dwho', 'reuse: session retrieved after a failure' );
+        tied(%s)->delete;
+        untie %s;
+        ok( !eval { tie %s, $class, $rid, $args; 1 },
+            'reuse: session deleted' );
+    }
 
     $reset->();
 

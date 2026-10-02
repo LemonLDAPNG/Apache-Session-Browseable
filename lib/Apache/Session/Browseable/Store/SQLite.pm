@@ -42,13 +42,26 @@ sub connection {
     my $datasource = $session->{args}->{DataSource}
       || $Apache::Session::Store::MySQL::DataSource;
 
-    $self->{dbh} =
-      DBI->connect( $datasource, '', '', { RaiseError => 1, AutoCommit => 0 } )
-      || die $DBI::errstr;
-    $self->{dbh}->{sqlite_unicode} = 1;
+    # AutoCommit off: see "Why AutoCommit differs" in Store/DBI.pm
+    if (
+        my $dbh = $self->_reusedHandle(
+            $session->{args}, $datasource, '', '',
+            { RaiseError => 1, AutoCommit => 0 }
+        )
+      )
+    {
+        $self->{dbh} = $dbh;
+    }
+    else {
+        $self->{dbh} =
+          DBI->connect( $datasource, '', '',
+            { RaiseError => 1, AutoCommit => 0 } )
+          || die $DBI::errstr;
 
-    #If we open the connection, we close the connection
-    $self->{disconnect} = 1;
+        #If we open the connection, we close the connection
+        $self->{disconnect} = 1;
+    }
+    $self->{dbh}->{sqlite_unicode} = 1;
 
     #the programmer has to tell us what commit policy to use
     $self->{commit} = $session->{args}->{Commit};
@@ -157,6 +170,11 @@ connecting to the database.  These values can be set using the options hash
 =item Handle
 
 =item TableName
+
+=item noreuse
+
+Open and close a connection for each session instead of keeping it open, see
+L<Apache::Session::Browseable/"PERSISTENT DATABASE CONNECTIONS">.
 
 =back
 

@@ -10,8 +10,11 @@ our @ISA =
 our $VERSION = '1.2.2';
 
 sub connection {
-    my($self,$session)=@_;
-    $self->SUPER::connection($session);
+    my ( $self, $session ) = @_;
+
+    # AutoCommit off: see "Why AutoCommit differs" in Store/DBI.pm
+    $self->_connection( $session, 'Apache::Session::Store::Postgres',
+        { RaiseError => 1, AutoCommit => 0 } );
     $self->{dbh}->{pg_enable_utf8} = 1;
 }
 

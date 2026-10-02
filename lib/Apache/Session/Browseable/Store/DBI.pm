@@ -5,6 +5,60 @@ use Apache::Session::Store::DBI;
 our @ISA     = qw(Apache::Session::Store::DBI);
 our $VERSION = 1.3.11;
 
+# Connection reuse (default): returns a handle cached by DBI->connect_cached()
+# (which pings it and reconnects if needed), opened with the attributes $attr
+# that the store uses without reuse. Returns undef if the store is already
+# connected, if "noreuse" is set or if a Handle is given.
+#
+# Why AutoCommit differs between stores: each store opens its connection
+# with the attributes of the Apache::Session store it derives from.
+# Apache::Session::Store::Postgres, ::Oracle, ::Sybase and ::Informix use
+# AutoCommit off and commit in DESTROY when Commit is set (upstream, the
+# Postgres, Oracle and Informix stores also lock the row with
+# "SELECT ... FOR UPDATE", but here materialize() comes first from
+# Apache::Session::Store::DBI, which doesn't lock); the Patroni and SQLite
+# stores copy this model. Apache::Session::Store::MySQL (MySQLJSON derives
+# from it) was written for MyISAM, which has no transaction: AutoCommit on. No SQL backend of this distribution locks
+# sessions (they all use Apache::Session::Lock::Null): with AutoCommit off,
+# the transaction only spans the reads and the write of one tie.
+# Keeping each store's own attributes keeps its behaviour unchanged.
+#
+# Stores don't disconnect a handle they didn't open, so a transaction that
+# the store doesn't commit (AutoCommit off, Commit not set or commit failure)
+# would stay open, with its locks, on the shared handle: it is rolled back
+# when the store is destroyed, after its own DESTROY (as disconnect did)
+sub _reusedHandle {
+    my ( $self, $args, $datasource, $username, $password, $attr ) = @_;
+    return undef
+      if ( defined $self->{dbh} or $args->{noreuse} or exists $args->{Handle} );
+    my $dbh = DBI->connect_cached( $datasource, $username, $password, $attr )
+      || die $DBI::errstr;
+    $self->{reuse_rollback} =
+      bless \$dbh, 'Apache::Session::Browseable::Store::DBI::Rollback'
+      unless ( $dbh->{AutoCommit} );
+    return $dbh;
+}
+
+# connection() of stores whose parent class $class (an Apache::Session::Store
+# class) opens a connection with the attributes $attr and uses the Handle
+# argument as is
+sub _connection {
+    my ( $self, $session, $class, $attr ) = @_;
+    my $args    = $session->{args};
+    my $connect = $class->can('connection');
+    my @credentials;
+    {
+        no strict 'refs';
+        @credentials = map { $args->{$_} || ${"${class}::$_"} }
+          qw(DataSource UserName Password);
+    }
+    if ( my $dbh = $self->_reusedHandle( $args, @credentials, $attr ) ) {
+        local $args->{Handle} = $dbh;
+        return $self->$connect($session);
+    }
+    return $self->$connect($session);
+}
+
 sub insert {
     my ( $self, $session ) = @_;
 
@@ -68,6 +122,16 @@ sub update {
     $self->{update_sth}->execute;
 
     $self->{update_sth}->finish;
+}
+
+package Apache::Session::Browseable::Store::DBI::Rollback;
+
+# Ends the transaction left by a store using a reused handle (no-op if the
+# store committed it)
+sub DESTROY {
+    my $dbh = ${ $_[0] };
+    local $@;
+    eval { $dbh->rollback } if ( $dbh->{Active} and !$dbh->{AutoCommit} );
 }
 
 1;
