@@ -19,10 +19,29 @@ sub populate {
     $self->{lock_manager} = new Apache::Session::Lock::Null $self;
     $self->{generate}     = \&Apache::Session::Generate::SHA256::generate;
     $self->{validate}     = \&Apache::Session::Generate::SHA256::validate;
-    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serialize;
+    $self->{serialize}    = \&Apache::Session::Serialize::JSON::serializeLatin1;
     $self->{unserialize}  = \&Apache::Session::Serialize::JSON::unserialize;
 
     return $self;
+}
+
+# Key name sent to Redis, see Store::Redis::keyName()
+sub _keyName {
+    return Apache::Session::Browseable::Store::Redis::keyName(@_);
+}
+
+# SCAN patterns for searchOnExpr(). The name of a set is Latin-1 unless it
+# holds characters above U+00FF, so a wildcard may stand for such characters
+# while the literal part is not ASCII: the UTF-8 form is then scanned too
+sub _exprPatterns {
+    my ( $field, $value ) = @_;
+    my @res = ( _keyName("${field}_$value") );
+    if ( $value =~ /\*/ ) {
+        my $p = "${field}_$value";
+        utf8::encode($p);
+        push @res, $p unless ( $p eq $res[0] );
+    }
+    return @res;
 }
 
 sub unserialize {
@@ -39,7 +58,7 @@ sub searchOn {
     if ( $class->isIndexed( $args, $selectField ) ) {
 
         my $redisObj  = $class->_getRedis($args);
-        my $index_key = "${selectField}_$value";
+        my $index_key = _keyName("${selectField}_$value");
         my @keys      = $redisObj->smembers($index_key);
         foreach my $k (@keys) {
             next unless ($k);
@@ -91,28 +110,30 @@ sub searchOnExpr {
     my %res;
     if ( $class->isIndexed( $args, $selectField ) ) {
         my $redisObj = $class->_getRedis($args);
-        my $cursor   = 0;
-        do {
-            my ( $new_cursor, $sets ) =
-              $redisObj->scan( $cursor, MATCH => "${selectField}_$value" );
-            foreach my $set (@$sets) {
-                next unless $redisObj->type($set) eq 'set';
-                my @keys = $redisObj->smembers($set);
-                foreach my $k (@keys) {
-                    my $v = $redisObj->get($k);
-                    unless ($v) {
-                        # Lazy cleanup: remove orphan from index
-                        eval { $redisObj->srem( $set, $k ) };
-                        next;
-                    }
-                    my $tmp = unserialize($v);
-                    if ($tmp) {
-                        $res{$k} = $class->extractFields( $tmp, @fields );
+        foreach my $pattern ( _exprPatterns( $selectField, $value ) ) {
+            my $cursor = 0;
+            do {
+                my ( $new_cursor, $sets ) =
+                  $redisObj->scan( $cursor, MATCH => $pattern );
+                foreach my $set (@$sets) {
+                    next unless $redisObj->type($set) eq 'set';
+                    my @keys = $redisObj->smembers($set);
+                    foreach my $k (@keys) {
+                        my $v = $redisObj->get($k);
+                        unless ($v) {
+                            # Lazy cleanup: remove orphan from index
+                            eval { $redisObj->srem( $set, $k ) };
+                            next;
+                        }
+                        my $tmp = unserialize($v);
+                        if ($tmp) {
+                            $res{$k} = $class->extractFields( $tmp, @fields );
+                        }
                     }
                 }
-            }
-            $cursor = $new_cursor;
-        } while ( $cursor != 0 );
+                $cursor = $new_cursor;
+            } while ( $cursor != 0 );
+        }
     }
     else {
         $value = quotemeta($value);
@@ -184,7 +205,7 @@ sub deleteIfLowerThan {
                 foreach my $i (@$index) {
                     my $t = $v->{$i};
                     next unless ( defined($t) and length($t) > 0 );
-                    eval { $redisObj->srem( "${i}_$t", $k ) };
+                    eval { $redisObj->srem( _keyName("${i}_$t"), $k ) };
                     if ($@) {
                         warn "Failed to remove '$k' from index '${i}_$t': $@";
                         $index_ok = 0;
@@ -352,6 +373,16 @@ Apache::Session::browseable provides some class methods to manipulate all
 sessions and add the capability to index some fields to make research faster.
 
 This module use either L<Redis::Fast> or L<Redis>.
+
+=head1 CHARACTERS ABOVE U+00FF
+
+Redis clients refuse characters above U+00FF. Sessions are stored as JSON
+where such characters (and only them) are written as C<\uXXXX> escapes, so
+they are supported: the stored value is the same as before for a session
+holding only Latin-1 characters. Index set names (C<field_value>) are sent as
+Latin-1 bytes when they can be, so existing sets keep working, and as UTF-8
+bytes otherwise. The name of a value above U+00FF may then be the same as the
+Latin-1 name of another value (C<uid_\x{3a9}> and C<uid_\x{ce}\x{a9}>).
 
 =head1 SEE ALSO
 
