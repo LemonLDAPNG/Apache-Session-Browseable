@@ -214,6 +214,12 @@ sessions and add the capability to index some fields to make research faster.
 Apache::Session::Browseable::PgHstore implements it for PosqtgreSQL databases
 using "hstore" extension to be able to browse sessions.
 
+=head2 Persistent connection
+
+The database connection is kept open between sessions. Set
+C<noreuse =E<gt> 1> to open and close one for each session, see
+L<Apache::Session::Browseable/"PERSISTENT DATABASE CONNECTIONS">.
+
 =head1 SEE ALSO
 
 L<http://lemonldap-ng.org>, L<Apache::Session::Postgres>

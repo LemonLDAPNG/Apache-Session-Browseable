@@ -87,6 +87,12 @@ argument is mandatory in order to make you think about this problem.
 This module was written by Xavier Guimard <x.guimard@free.fr> using
 Apache::Session::Postgres from Jeffrey William Baker as example.
 
+=head2 Persistent connection
+
+The database connection is kept open between sessions. Set
+C<noreuse =E<gt> 1> to open and close one for each session, see
+L<Apache::Session::Browseable/"PERSISTENT DATABASE CONNECTIONS">.
+
 =head1 SEE ALSO
 
 L<Apache::Session::Browseable>

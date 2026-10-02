@@ -171,6 +171,11 @@ connecting to the database.  These values can be set using the options hash
 
 =item TableName
 
+=item noreuse
+
+Open and close a connection for each session instead of keeping it open, see
+L<Apache::Session::Browseable/"PERSISTENT DATABASE CONNECTIONS">.
+
 =back
 
 Example:

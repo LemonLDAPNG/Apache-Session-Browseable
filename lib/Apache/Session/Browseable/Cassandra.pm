@@ -97,6 +97,9 @@ Instead, you may pass in an already-opened DBI handle to your database.
      Handle => $dbh
  };
 
+The connection is kept open between sessions. Set C<noreuse =E<gt> 1> to open
+and close one for each session, see L<Apache::Session::Browseable/"PERSISTENT DATABASE CONNECTIONS">.
+
 =head1 SEE ALSO
 
 L<Apache::Session>, L<Apache::Session::DBI>
