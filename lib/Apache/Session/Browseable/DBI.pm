@@ -29,7 +29,6 @@ sub searchOnExpr {
     my ( $args, $selectField, $value, @fields ) = @_;
 
     # Escape quotes
-    $value       =~ s/'/''/g;
     $selectField =~ s/'/''/g;
     if ( $class->_fieldIsIndexed( $args, $selectField ) ) {
         $value =~ s/\*/%/g;
