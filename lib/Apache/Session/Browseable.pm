@@ -70,6 +70,143 @@ manage connection using Patroni API to find master node of PostgreSQL cluster
 
 =back
 
+=head1 ADDING A COLUMN TO Index ON AN EXISTING TABLE
+
+With the backends that store indexed fields in dedicated columns (Postgres,
+MySQL, SQLite, Oracle, Informix...), the index columns are filled only when a
+session is inserted or updated. If you add a column to C<Index> on a table that
+already contains sessions, this column stays C<NULL> for every existing session
+until it is written again. Such sessions are considered as "field absent":
+C<searchOn()> and C<searchOnExpr()> do not find them, and the C<not> clause of
+C<deleteIfLowerThan()> (which matches C<NULL> columns) can delete them. For
+example, Lemonldap::NG purges with
+C<< not =E<gt> { _session_kind =E<gt> 'Persistent' } >>: it would delete
+persistent sessions whose C<_session_kind> column was never filled.
+Conversely, a column that was never filled never matches the C<or>/C<and>
+thresholds of C<deleteIfLowerThan()> (a C<NULL> column is never lower than a
+value): these sessions are not purged through that field (an C<or> rule can
+still purge them through its other fields).
+
+So, before relying on a new column, you must backfill it. Which method to use
+depends on the backend. The examples below backfill a column named
+C<_session_kind> (a field of Lemonldap::NG sessions): replace it by your field.
+
+=head2 Backends that need no backfill
+
+L<Apache::Session::Browseable::PgJSON>, L<Apache::Session::Browseable::PgHstore>,
+L<Apache::Session::Browseable::MySQLJSON> and MariaDB's JSON variant use an
+expression index or a generated column computed from the serialized data:
+creating the index (or the generated column) computes it for every existing
+row.
+
+=head2 Backfilling in SQL (JSON serializer only)
+
+This is possible only if the serializer is C<Apache::Session::Serialize::JSON>
+(the case of Postgres, Patroni, MySQL, SQLite, Oracle...) B<and> the database
+can extract a field from a JSON text. The following examples assume a table
+named C<sessions> whose C<a_session> column contains the serialized session.
+
+If a single row is not valid JSON, the whole C<UPDATE> fails and nothing is
+backfilled. Such rows exist: sessions written by old versions with Storable
+(the JSON serializer still reads them through C<Storable::thaw>), or corrupted
+rows. The examples therefore skip them.
+
+=over
+
+=item PostgreSQL 16 and later
+
+  UPDATE sessions SET _session_kind = a_session::json->>'_session_kind'
+    WHERE _session_kind IS NULL AND a_session IS JSON;
+
+Older PostgreSQL versions have no simple equivalent of C<IS JSON>: use the
+generic method below.
+
+=item MySQL / MariaDB
+
+  UPDATE sessions
+    SET _session_kind = JSON_UNQUOTE(JSON_EXTRACT(a_session, '$._session_kind'))
+    WHERE _session_kind IS NULL AND JSON_VALID(a_session);
+
+=item SQLite
+
+Use C<json_extract(a_session, '$._session_kind')>, restricted to rows where
+C<json_valid(a_session)> is true.
+
+=item Oracle (12.1.0.2 and later)
+
+Use C<JSON_VALUE(a_session, '$._session_kind')>.
+
+=back
+
+Rows skipped by these statements (and rows that were still C<NULL> after them)
+must be handled with the generic method.
+
+=head2 Backends where SQL cannot be used
+
+=over
+
+=item Sybase
+
+L<Apache::Session::Browseable::Sybase> uses
+C<Apache::Session::Serialize::Sybase>, not JSON: no SQL statement can extract a
+field from C<a_session>.
+
+=item Informix
+
+The session is stored as JSON text, but Informix has no simple function to
+extract a field from a text column.
+
+=item Redis and LDAP
+
+The index is maintained by the module only when a session is written, and there
+is no SQL column to fill.
+
+=back
+
+Use the generic method for these backends.
+
+=head2 Generic method: re-save every session from Perl
+
+This works with every backend (including the ones above and non-JSON rows): read
+each session and write it again, so that the store rewrites its index columns.
+Set C<$class> and C<$args> as you do in your application:
+
+  my $class = 'Apache::Session::Browseable::Postgres';   # your backend
+  my $ids   = $class->get_key_from_all_sessions( $args, sub { 1 } );
+  foreach my $id ( keys %$ids ) {
+      tie my %s, $class, $id, $args;
+      $s{_session_kind} = $s{_session_kind};   # marks the session as modified
+      untie %s;
+  }
+
+Notes:
+
+=over
+
+=item *
+
+Run it when the activity is low: a session updated by another process between
+C<tie> and C<untie> loses that update.
+
+=item *
+
+The session data is written back unchanged: no timestamp stored in the
+session is updated, so sessions do not get a longer life.
+
+=item *
+
+Sessions that cannot be unserialized are reported on C<STDERR> and skipped.
+
+=back
+
+=head2 Do not just wait for sessions to be rewritten
+
+Short-lived sessions expire and sessions rewritten regularly get their column
+filled over time, but a session that is never rewritten keeps a C<NULL> column
+forever. With Lemonldap::NG, persistent sessions never expire and are rewritten
+only when the user logs in: they are exactly the ones its purge rule could
+delete. Backfill before relying on the column.
+
 =head1 SEE ALSO
 
 L<Apache::Session>, L<http://lemonldap-ng.org>,
