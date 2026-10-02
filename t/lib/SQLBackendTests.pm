@@ -8,9 +8,11 @@ package SQLBackendTests;
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
 #  - index:   indexed fields (DBI based backends, one column per field)
-#  - todo:    known bugs of this backend: { test group => reason }. Tests of
-#             these groups are run as TODO tests and may die without
-#             breaking the rest of the suite
+#  - json:    1 if any field can be queried (JSON/Hstore backends)
+#  - weird:   field names that need quoting (JSON/Hstore backends)
+#  - corrupt: a_session value that can't be unserialized
+#  - lcGkfas: 1 if get_key_from_all_sessions() with indexed field names
+#             returns lower-cased names (DBI backend with PostgreSQL)
 
 use strict;
 use warnings;
@@ -18,7 +20,6 @@ use Test::More;
 use Exporter 'import';
 
 our @EXPORT = qw(run_tests);
-our $TODO;
 
 sub run_tests {
     my %o = @_;
@@ -50,7 +51,7 @@ sub run_tests {
         Commit     => 1,
         ( $o{index} ? ( Index => $o{index} ) : () ),
     };
-    my %todo = %{ $o{todo} || {} };
+    my @weird = @{ $o{weird} || [] };
 
     my $newSession = sub {
         my %data = @_;
@@ -70,6 +71,7 @@ sub run_tests {
             _utime        => 100,
             _lastSeen     => 100,
             mail          => 'dwho@badwolf.org',
+            ( map { ( $_ => 'w1' ) } @weird ),
         },
         rtyler => {
             uid           => 'rtyler',
@@ -78,6 +80,7 @@ sub run_tests {
             _utime        => 100,
             _lastSeen     => 300,
             mail          => 'rtyler@badwolf.org',
+            ( map { ( $_ => 'w2' ) } @weird ),
         },
         obrien => {
             uid           => "O'Brien",
@@ -102,258 +105,209 @@ sub run_tests {
         $ids = { map { ( $_ => $newSession->( %{ $data{$_} } ) ) } keys %data };
     };
     my $name = sub {
-        my %rev = reverse %{ $ids || {} };
-        return join ',', sort map { $rev{$_} // $_ } keys %{ $_[0] || {} };
+        my %rev = reverse %$ids;
+        return join ',', sort map { $rev{$_} // $_ } keys %{ $_[0] };
     };
     my $remaining = sub {
         return $name->( $class->get_key_from_all_sessions($args) );
     };
-
-    # Run a group of tests. If the group is a known bug of this backend, run
-    # it as TODO: STDERR is silenced and a die is reported as a failure
-    my $group = sub {
-        my ( $key, $code ) = @_;
-        return $code->() unless $todo{$key};
-      TODO: {
-            local $TODO = $todo{$key};
-            local *STDERR;
-            my $err = '';
-            open STDERR, '>', \$err;
-            eval { $code->(); 1 } or fail("$key died: $@");
-        }
+    my $quiet = sub {
+        my ($code) = @_;
+        local *STDERR;
+        my $err = '';
+        open STDERR, '>', \$err;
+        return $code->();
     };
 
     # Store / retrieve
-    $group->(
-        store => sub {
-            my $id = $newSession->( %{ $data{dwho} }, list => [ 1, 2 ] );
-            ok( $id, 'Session created' );
-            my %session;
-            ok( tie( %session, $class, $id, $args ), 'Session retrieved' );
-            is( $session{$_}, $data{dwho}->{$_}, "Field $_ retrieved" )
-              foreach ( sort keys %{ $data{dwho} } );
-            is_deeply( $session{list}, [ 1, 2 ], 'Array retrieved' );
-            untie %session;
-        }
-    );
+    my $id = $newSession->( %{ $data{dwho} }, list => [ 1, 2 ] );
+    ok( $id, 'Session created' );
+    my %session;
+    ok( tie( %session, $class, $id, $args ), 'Session retrieved' );
+    is( $session{$_}, $data{dwho}->{$_}, "Field $_ retrieved" )
+      foreach ( sort keys %{ $data{dwho} } );
+    is_deeply( $session{list}, [ 1, 2 ], 'Array retrieved' );
+    untie %session;
 
     $reset->();
 
-    # searchOn / searchOnExpr
-    $group->(
-        searchOn => sub {
-            my $res = $class->searchOn( $args, 'uid', 'dwho' );
-            is( $name->($res), 'dwho', 'searchOn without fields' );
+    # searchOn
+    my $res = $class->searchOn( $args, 'uid', 'dwho' );
+    is( $name->($res), 'dwho', 'searchOn without fields' );
+    is( $res->{ $ids->{dwho} }->{mail},
+        'dwho@badwolf.org', 'searchOn without fields returns session data' );
 
-            $res = $class->searchOn( $args, '_whatToTrace', "O'Brien", 'uid' );
-            is_deeply(
-                $res,
-                {
-                    $ids->{obrien} => { id => $ids->{obrien}, uid => "O'Brien" }
-                },
-                'searchOn on a value containing a quote'
-            );
+    $res = $class->searchOn( $args, 'uid', 'dwho', '_whatToTrace', 'uid' );
+    is_deeply(
+        $res,
+        {
+            $ids->{dwho} =>
+              { id => $ids->{dwho}, _whatToTrace => 'dwho', uid => 'dwho' }
+        },
+        'searchOn with fields keeps field name case'
+    );
 
-            $res = $class->searchOn( $args, '_session_kind', 'SSO', '_utime' );
-            is( $name->($res), 'dwho,obrien', 'searchOn on _session_kind' );
+    $res = $class->searchOn( $args, '_whatToTrace', "O'Brien", 'uid' );
+    is_deeply(
+        $res,
+        { $ids->{obrien} => { id => $ids->{obrien}, uid => "O'Brien" } },
+        'searchOn on a value containing a quote'
+    );
 
-            $res = $class->searchOnExpr( $args, '_whatToTrace', '*t*' );
-            is( $name->($res), 'rtyler', 'searchOnExpr without fields' );
-        }
-    );
-    $group->(
-        searchOnData => sub {
-            my $res = $class->searchOn( $args, 'uid', 'dwho' );
-            is( $res->{ $ids->{dwho} }->{mail},
-                'dwho@badwolf.org',
-                'searchOn without fields returns session data' );
-            $res = $class->searchOnExpr( $args, 'uid', 'dw*' );
-            is( $res->{ $ids->{dwho} }->{mail},
-                'dwho@badwolf.org',
-                'searchOnExpr without fields returns session data' );
-        }
-    );
-    $group->(
-        searchOnFields => sub {
-            my $res =
-              $class->searchOn( $args, 'uid', 'dwho', '_whatToTrace', 'uid' );
-            is_deeply(
-                $res,
-                {
-                    $ids->{dwho} => {
-                        id           => $ids->{dwho},
-                        _whatToTrace => 'dwho',
-                        uid          => 'dwho'
-                    }
-                },
-                'searchOn with fields keeps field name case'
-            );
-            $res =
-              $class->searchOnExpr( $args, '_whatToTrace', '*t*',
-                '_whatToTrace' );
-            is_deeply(
-                $res,
-                {
-                    $ids->{rtyler} =>
-                      { id => $ids->{rtyler}, _whatToTrace => 'rtyler' }
-                },
-                'searchOnExpr with fields keeps field name case'
-            );
-        }
-    );
-    $group->(
-        searchOnExprQuote => sub {
-            my $res = $class->searchOnExpr( $args, 'uid', "O'Br*" );
-            is( $name->($res), 'obrien',
-                'searchOnExpr on a value containing a quote' );
-        }
+    $res = $class->searchOn( $args, '_session_kind', 'SSO', '_utime' );
+    is( $name->($res), 'dwho,obrien', 'searchOn on _session_kind' );
+
+    # searchOnExpr
+    $res = $class->searchOnExpr( $args, 'uid', "O'Br*" );
+    is( $name->($res), 'obrien', 'searchOnExpr on a value containing a quote' );
+    is( $res->{ $ids->{obrien} }->{mail},
+        'obrien@badwolf.org',
+        'searchOnExpr without fields returns session data' );
+
+    $res = $class->searchOnExpr( $args, '_whatToTrace', '*t*', '_whatToTrace' );
+    is_deeply(
+        $res,
+        {
+            $ids->{rtyler} => { id => $ids->{rtyler}, _whatToTrace => 'rtyler' }
+        },
+        'searchOnExpr with fields'
     );
 
     # get_key_from_all_sessions
-    $group->(
-        gkfas => sub {
-            my $res = $class->get_key_from_all_sessions($args);
-            is( $name->($res), 'dwho,nokind,obrien,rtyler',
-                'get_key_from_all_sessions without argument' );
-            is( $res->{ $ids->{rtyler} }->{mail},
-                'rtyler@badwolf.org',
-                'get_key_from_all_sessions returns session data' );
+    $res = $class->get_key_from_all_sessions($args);
+    is( $name->($res), 'dwho,nokind,obrien,rtyler',
+        'get_key_from_all_sessions without argument' );
+    is( $res->{ $ids->{rtyler} }->{mail},
+        'rtyler@badwolf.org',
+        'get_key_from_all_sessions returns session data' );
 
-            $res = $class->get_key_from_all_sessions( $args,
-                sub { $_[0]->{uid} eq 'dwho' ? $_[0]->{mail} : undef } );
-            is_deeply(
-                $res,
-                { $ids->{dwho} => 'dwho@badwolf.org' },
-                'get_key_from_all_sessions with a code ref'
-            );
-        }
+    my $f = $o{lcGkfas} ? '_whattotrace' : '_whatToTrace';
+    $res = $class->get_key_from_all_sessions( $args, '_whatToTrace' );
+    is_deeply(
+        $res->{ $ids->{rtyler} },
+        { id => $ids->{rtyler}, $f => 'rtyler' },
+        'get_key_from_all_sessions with a field name'
     );
-    $group->(
-        gkfasArray => sub {
-            my $fields = [ 'uid', '_utime' ];
-            my $res    = $class->get_key_from_all_sessions( $args, $fields );
-            is( $name->($res), 'dwho,nokind,obrien,rtyler',
-                'get_key_from_all_sessions with an array ref' );
-            is( $res->{ $ids->{obrien} }->{uid},
-                "O'Brien",
-                'get_key_from_all_sessions with an array ref returns data' );
-            is_deeply(
-                $fields,
-                [ 'uid', '_utime' ],
-                'Array ref is not modified'
-            );
-        }
+
+    my $fields = [ 'uid', '_utime' ];
+    $res = $class->get_key_from_all_sessions( $args, $fields );
+    is( $name->($res), 'dwho,nokind,obrien,rtyler',
+        'get_key_from_all_sessions with an array ref' );
+    is( $res->{ $ids->{obrien} }->{uid},
+        "O'Brien", 'get_key_from_all_sessions with an array ref returns data' );
+    is_deeply( $fields, [ 'uid', '_utime' ], 'Array ref is not modified' );
+
+    $res = $class->get_key_from_all_sessions( $args,
+        sub { $_[0]->{uid} eq 'dwho' ? $_[0]->{mail} : undef } );
+    is_deeply(
+        $res,
+        { $ids->{dwho} => 'dwho@badwolf.org' },
+        'get_key_from_all_sessions with a code ref'
     );
-    $group->(
-        gkfasField => sub {
-            my $res =
-              $class->get_key_from_all_sessions( $args, '_whatToTrace' );
-            is_deeply(
-                $res->{ $ids->{rtyler} },
-                { id => $ids->{rtyler}, _whatToTrace => 'rtyler' },
-                'get_key_from_all_sessions with a field name'
-            );
+
+    # Fields needing quotes
+    foreach my $w (@weird) {
+        $res = $class->searchOn( $args, $w, 'w1', $w, 'uid' );
+        is_deeply(
+            $res,
+            {
+                $ids->{dwho} =>
+                  { id => $ids->{dwho}, $w => 'w1', uid => 'dwho' }
+            },
+            "searchOn on field [$w]"
+        );
+        $res = $class->searchOnExpr( $args, $w, 'w*', 'uid' );
+        is( $name->($res), 'dwho,rtyler', "searchOnExpr on field [$w]" );
+        $res = $class->get_key_from_all_sessions( $args, [ $w, 'uid' ] );
+        is( $res->{ $ids->{rtyler} }->{$w},
+            'w2', "get_key_from_all_sessions with field [$w]" );
+    }
+    if ( $o{json} ) {
+        foreach my $w ( "x' OR '1'='1", 'x" OR "1"="1', "x`y" ) {
+            $res = eval { $class->searchOn( $args, $w, 'w1', $w ) };
+            is_deeply( $res, {}, "searchOn on field [$w]: no injection" )
+              or diag $@;
+            $res = eval { $class->get_key_from_all_sessions( $args, [$w] ) };
+            is( scalar( keys %$res ),
+                4, "get_key_from_all_sessions with field [$w]" )
+              or diag $@;
         }
-    );
+    }
 
     # deleteIfLowerThan
-    $group->(
-        delete => sub {
-            $reset->();
-            my @r =
-              $class->deleteIfLowerThan( $args, { or => { _utime => 200 } } );
-            is_deeply(
-                \@r,
-                [ 1, 3 ],
-                'deleteIfLowerThan "or": 3 sessions deleted'
-            );
-            is( $remaining->(), 'obrien',
-                'deleteIfLowerThan "or": 1 session kept' );
+    my @r = $class->deleteIfLowerThan( $args, { or => { _utime => 200 } } );
+    is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan "or": 3 sessions deleted' );
+    is( $remaining->(), 'obrien', 'deleteIfLowerThan "or": 1 session kept' );
 
-            $reset->();
-            @r = $class->deleteIfLowerThan( $args,
-                { or => { _utime => 200, _lastSeen => 200 } } );
-            is_deeply( \@r, [ 1, 4 ], 'deleteIfLowerThan "or" with 2 fields' );
-        }
-    );
-    $group->(
-        deleteAnd => sub {
-            $reset->();
-            my @r = $class->deleteIfLowerThan( $args,
-                { and => { _utime => 200, _lastSeen => 200 } } );
-            is_deeply(
-                \@r,
-                [ 1, 2 ],
-                'deleteIfLowerThan "and": 2 sessions deleted'
-            );
-            is( $remaining->(), 'obrien,rtyler',
-                'deleteIfLowerThan "and": 2 kept' );
-        }
-    );
-    $group->(
-        deleteNot => sub {
-            $reset->();
-            my @r = $class->deleteIfLowerThan(
-                $args,
-                {
-                    or  => { _utime        => 200 },
-                    not => { _session_kind => 'Persistent' }
-                }
-            );
-            is_deeply(
-                \@r,
-                [ 1, 2 ],
-                'deleteIfLowerThan "not": 2 sessions deleted'
-            );
-            is( $remaining->(), 'obrien,rtyler',
-                'deleteIfLowerThan "not": session without field deleted' );
-        }
-    );
-    $group->(
-        deleteAndNot => sub {
-            $reset->();
-            my @r = $class->deleteIfLowerThan(
-                $args,
-                {
-                    and => { _utime        => 200, _lastSeen => 400 },
-                    not => { _session_kind => 'Persistent' }
-                }
-            );
-            is_deeply( \@r, [ 1, 2 ], 'deleteIfLowerThan "and" with "not"' );
-            is( $remaining->(), 'obrien,rtyler',
-                'deleteIfLowerThan "and" with "not": right sessions kept' );
-        }
-    );
-    $group->(
-        deleteNotQuote => sub {
-            $reset->();
-            my @r = $class->deleteIfLowerThan( $args,
-                { or => { _utime => 400 }, not => { uid => "O'Brien" } } );
-            is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan "not" with a quote' );
-            is( $remaining->(), 'obrien',
-                'deleteIfLowerThan "not" with a quote' );
+    $reset->();
+    @r = $class->deleteIfLowerThan( $args,
+        { or => { _utime => 200, _lastSeen => 200 } } );
+    is_deeply( \@r, [ 1, 4 ], 'deleteIfLowerThan "or" with 2 fields' );
 
-            $reset->();
-            @r = $class->deleteIfLowerThan( $args,
-                { or => { _utime => 400 }, not => { uid => "x' OR '1'='1" } } );
-            is_deeply( \@r, [ 1, 4 ], 'deleteIfLowerThan "not": no injection' );
-        }
-    );
-    $group->(
-        ruleNotModified => sub {
-            $reset->();
-            my $rule =
-              { or => { _utime => 400 }, not => { uid => "O'Brien" } };
-            {
-                # Some backends die here, only the rule matters
-                local *STDERR;
-                my $err = '';
-                open STDERR, '>', \$err;
-                eval { $class->deleteIfLowerThan( $args, $rule ) };
+    $reset->();
+    @r = $class->deleteIfLowerThan( $args,
+        { and => { _utime => 200, _lastSeen => 200 } } );
+    is_deeply( \@r, [ 1, 2 ], 'deleteIfLowerThan "and": 2 sessions deleted' );
+    is( $remaining->(), 'obrien,rtyler', 'deleteIfLowerThan "and": 2 kept' );
+
+    $reset->();
+    @r = $class->deleteIfLowerThan( $args,
+        { or => { _utime => 200 }, not => { _session_kind => 'Persistent' } } );
+    is_deeply( \@r, [ 1, 2 ], 'deleteIfLowerThan "not": 2 sessions deleted' );
+    is( $remaining->(), 'obrien,rtyler',
+        'deleteIfLowerThan "not": session without field deleted' );
+
+    $reset->();
+    my $rule = { or => { _utime => 400 }, not => { uid => "O'Brien" } };
+    @r = $class->deleteIfLowerThan( $args, $rule );
+    is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan "not" with a quote' );
+    is( $remaining->(),      'obrien', 'deleteIfLowerThan "not" with a quote' );
+    is( $rule->{not}->{uid}, "O'Brien", 'Rule is not modified' );
+
+    $reset->();
+    @r = $class->deleteIfLowerThan( $args,
+        { or => { _utime => 400 }, not => { uid => "x' OR '1'='1" } } );
+    is_deeply( \@r, [ 1, 4 ], 'deleteIfLowerThan "not": no injection' );
+
+    $reset->();
+    @r =
+      eval { $class->deleteIfLowerThan( $args, { not => { uid => 'dwho' } } ); };
+    is_deeply( \@r, [0], 'deleteIfLowerThan with only "not" returns 0' )
+      or diag $@;
+    foreach my $bad ( '200 OR 1=1', '1e3', '' ) {
+        @r = $quiet->(
+            sub {
+                eval {
+                    $class->deleteIfLowerThan( $args,
+                        { or => { _utime => 400, _lastSeen => $bad } } );
+                };
             }
-            is( $rule->{not}->{uid}, "O'Brien", 'Rule is not modified' );
-        }
-    );
+        );
+        is_deeply( \@r, [0],
+            "deleteIfLowerThan with threshold '$bad' returns 0" );
+    }
+    is( $remaining->(), 'dwho,nokind,obrien,rtyler', 'Nothing deleted' );
+
+    @r = $class->deleteIfLowerThan( $args, { or => { _utime => '100.5' } } );
+    is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan with a decimal threshold' );
+
+    foreach my $w (@weird) {
+        $reset->();
+        @r = $class->deleteIfLowerThan( $args,
+            { or => { _utime => 400 }, not => { $w => 'w1' } } );
+        is_deeply( \@r, [ 1, 3 ], "deleteIfLowerThan \"not\" on field [$w]" );
+        is( $remaining->(), 'dwho', "deleteIfLowerThan \"not\" on field [$w]" );
+    }
+
+    # Corrupted session must not break listing
+    if ( $o{corrupt} ) {
+        $reset->();
+        $dbh->do( "INSERT INTO $table (id,a_session) VALUES ('corrupt',?)",
+            undef, $o{corrupt} );
+        $res = $quiet->( sub { $class->get_key_from_all_sessions($args) } );
+        is( $name->($res), 'dwho,nokind,obrien,rtyler',
+            'get_key_from_all_sessions skips corrupted session' );
+    }
 
     $dbh->do("DROP TABLE IF EXISTS $table");
     $dbh->disconnect;

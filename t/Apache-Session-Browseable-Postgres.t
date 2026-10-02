@@ -12,12 +12,6 @@ run_tests(
           . ' a_session text, uid text, _whatToTrace text, _session_kind text,'
           . ' _utime bigint, _lastSeen bigint)'
     ],
-    index => 'uid _whatToTrace _session_kind _utime _lastSeen',
-    todo  => {
-        searchOnExprQuote => 'quotes are doubled although the value is bound',
-        deleteNot       => 'sessions without the "not" field are never deleted',
-        deleteAndNot    => 'sessions without the "not" field are never deleted',
-        ruleNotModified => '"not" values of the rule are escaped in place',
-        gkfasField      => 'field names are returned lower-cased',
-    },
+    index   => 'uid _whatToTrace _session_kind _utime _lastSeen',
+    lcGkfas => 1,
 );

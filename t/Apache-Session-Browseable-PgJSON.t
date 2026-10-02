@@ -10,10 +10,6 @@ run_tests(
     create => [
 'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session jsonb)'
     ],
-    todo => {
-        deleteAnd      => '"and" rules are built from the "or" hash',
-        deleteNot      => 'sessions without the "not" field are never deleted',
-        deleteAndNot   => '"and" rules are built from the "or" hash',
-        deleteNotQuote => '"not" values are not escaped',
-    },
+    json  => 1,
+    weird => [ "weird'field", 'a"b\\c' ],
 );
