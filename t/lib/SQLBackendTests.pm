@@ -256,6 +256,36 @@ sub run_tests {
         }
     );
 
+    # Mixed-case field with a false value
+    my $zero = $newSession->( %{ $data{dwho} }, _whatToTrace => '0' );
+    $group->(
+        searchOnFields => sub {
+            my $res = $class->searchOn( $args, 'uid', 'dwho', '_whatToTrace' );
+            is( $res->{$zero}->{_whatToTrace},
+                '0',
+                'searchOn with fields keeps false value under original case' );
+        }
+    );
+    $group->(
+        gkfasArray => sub {
+            my $res =
+              $class->get_key_from_all_sessions( $args, ['_whatToTrace'] );
+            is( $res->{$zero}->{_whatToTrace},
+                '0',
+                'get_key_from_all_sessions with array ref and false value' );
+        }
+    );
+    $group->(
+        gkfasField => sub {
+            my $res =
+              $class->get_key_from_all_sessions( $args, '_whatToTrace' );
+            is( $res->{$zero}->{_whatToTrace},
+                '0',
+                'get_key_from_all_sessions with a field name and false value' );
+        }
+    );
+    $dbh->do( "DELETE FROM $table WHERE id=?", undef, $zero );
+
     # deleteIfLowerThan
     $group->(
         delete => sub {
