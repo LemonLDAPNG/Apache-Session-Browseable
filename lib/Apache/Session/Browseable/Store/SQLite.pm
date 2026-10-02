@@ -63,9 +63,10 @@ sub materialize {
     local $self->{dbh}->{RaiseError} = 1;
 
     if ( !defined $self->{materialize_sth} ) {
+        my $table = $self->_quoteTable( $self->{'table_name'} );
         $self->{materialize_sth} = $self->{dbh}->prepare_cached(
             qq{
-                SELECT a_session FROM $self->{'table_name'} WHERE id = ?}
+                SELECT a_session FROM $table WHERE id = ?}
         );
     }
 

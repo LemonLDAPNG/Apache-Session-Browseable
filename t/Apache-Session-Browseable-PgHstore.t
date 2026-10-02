@@ -11,7 +11,8 @@ run_tests(
         'CREATE EXTENSION IF NOT EXISTS hstore',
 'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session hstore)'
     ],
-    todo => {
+    tableCase => 1,
+    todo      => {
         gkfasArray     => 'the query does not select the id column',
         gkfasField     => 'the query does not select the id column',
         deleteAnd      => '"and" rules are built from the "or" hash',

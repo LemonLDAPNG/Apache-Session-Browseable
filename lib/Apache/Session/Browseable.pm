@@ -70,6 +70,22 @@ manage connection using Patroni API to find master node of PostgreSQL cluster
 
 =back
 
+=head1 TABLE AND COLUMN NAMES
+
+With PostgreSQL, MySQL, MariaDB and SQLite, the table name (C<TableName>) and
+the columns of the fields listed in C<Index> are quoted in SQL queries
+(C<quote_identifier()> of DBI), so an indexed field may be named after a
+reserved word (C<order>, C<user>...). A C<schema.table> name is quoted part by
+part, and a name that already contains quotes is used as is.
+
+PostgreSQL folds unquoted names to lower case: tables and columns created
+without quotes have lower case names. These names are therefore lowercased
+before being quoted, so C<TableName =E<gt> 'Sessions'> and the
+C<_whatToTrace> column keep working; tables and columns created with quoted
+mixed-case names are not supported.
+
+Other databases (Oracle, Sybase, Informix...) get the names unchanged.
+
 =head1 SEE ALSO
 
 L<Apache::Session>, L<http://lemonldap-ng.org>,

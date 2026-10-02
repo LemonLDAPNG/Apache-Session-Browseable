@@ -51,6 +51,7 @@ t/Apache-Session-Browseable-Patroni.t
 t/Apache-Session-Browseable-PgHstore.t
 t/Apache-Session-Browseable-PgJSON.t
 t/Apache-Session-Browseable-Postgres.t
+t/Apache-Session-Browseable-quoteIdentifier.t
 t/Apache-Session-Browseable-Redis.t
 t/Apache-Session-Browseable-SQLite.t
 t/Apache-Session-Browseable-Store-DBI.t

@@ -51,8 +51,7 @@ sub _query {
       : [ split /\s+/, $args->{Index} ];
 
     my $dbh        = $class->_classDbh($args);
-    my $table_name = $args->{TableName}
-      || $Apache::Session::Store::DBI::TableName;
+    my $table_name = $class->_tableName( $dbh, $args );
 
     my $sth;
     my $fields =
@@ -94,9 +93,8 @@ sub deleteIfLowerThan {
     }
     return 0 unless ($query);
     my $dbh        = $class->_classDbh($args);
-    my $table_name = $args->{TableName}
-      || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do("DELETE FROM $table_name WHERE $query");
+    my $table_name = $class->_tableName( $dbh, $args );
+    my $rows       = $dbh->do("DELETE FROM $table_name WHERE $query");
     return 0 unless defined $rows;
 
     if (wantarray) {
@@ -111,9 +109,8 @@ sub deleteIfLowerThan {
 sub get_key_from_all_sessions {
     my ( $class, $args, $data ) = @_;
 
-    my $table_name = $args->{TableName}
-      || $Apache::Session::Store::DBI::TableName;
-    my $dbh = $class->_classDbh($args);
+    my $dbh        = $class->_classDbh($args);
+    my $table_name = $class->_tableName( $dbh, $args );
     my $sth;
 
     # Special case if all wanted fields are indexed

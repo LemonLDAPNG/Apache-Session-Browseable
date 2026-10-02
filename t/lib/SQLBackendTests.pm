@@ -8,6 +8,9 @@ package SQLBackendTests;
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
 #  - index:   indexed fields (DBI based backends, one column per field)
+#  - reserved: an indexed field named after a reserved word (quoted column)
+#  - tableCase: 1 to also use the table with its name in upper case
+#               (PostgreSQL folds unquoted names to lower case)
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
@@ -354,6 +357,84 @@ sub run_tests {
             is( $rule->{not}->{uid}, "O'Brien", 'Rule is not modified' );
         }
     );
+
+    # Identifiers are quoted: an indexed column named after a reserved word
+    if ( my $w = $o{reserved} ) {
+        $group->(
+            reserved => sub {
+                $reset->();
+                my $id  = $newSession->( %{ $data{dwho} }, $w => 'r1' );
+                my $res = $class->searchOn( $args, $w, 'r1', $w );
+                is_deeply(
+                    $res,
+                    { $id => { id => $id, $w => 'r1' } },
+                    "searchOn on column [$w]"
+                );
+                $res = $class->searchOnExpr( $args, $w, 'r*' );
+                is( join( ',', keys %$res ),
+                    $id, "searchOnExpr on column [$w]" );
+                $res = $class->get_key_from_all_sessions( $args, [$w] );
+                is( $res->{$id}->{$w},
+                    'r1', "get_key_from_all_sessions with column [$w]" );
+                $group->(
+                    deleteNot => sub {
+                        my @r = $class->deleteIfLowerThan( $args,
+                            { or => { _utime => 200 }, not => { $w => 'r1' } }
+                        );
+                        is_deeply(
+                            \@r,
+                            [ 1, 3 ],
+                            "deleteIfLowerThan with column [$w]"
+                        );
+                        is(
+                            $remaining->(),
+                            join( ',', sort 'obrien', $id ),
+"deleteIfLowerThan with column [$w]: right sessions kept"
+                        );
+                    }
+                );
+            }
+        );
+    }
+
+    # Table name in upper case: it must reach the table created without quotes
+    if ( $o{tableCase} ) {
+        $group->(
+            tableCase => sub {
+                $reset->();
+                my $uargs = { %$args, TableName => uc($table) };
+                my %session;
+                tie %session, $class, undef, $uargs;
+                $session{uid}    = 'upper';
+                $session{_utime} = 100;
+                my $id = $session{_session_id};
+                untie %session;
+                tie %session, $class, $id, $uargs;
+                is( $session{uid}, 'upper', 'Upper case table: session read' );
+                $session{mail} = 'upper@badwolf.org';
+                untie %session;
+                my $res = $class->searchOn( $uargs, 'uid', 'upper', 'uid' );
+                is_deeply(
+                    $res,
+                    { $id => { id => $id, uid => 'upper' } },
+                    'Upper case table: searchOn'
+                );
+                $res = $class->get_key_from_all_sessions($uargs);
+                is( $res->{$id}->{mail},
+                    'upper@badwolf.org',
+                    'Upper case table: get_key_from_all_sessions' );
+                my @r = $class->deleteIfLowerThan( $uargs,
+                    { or => { _utime => 200 } } );
+                is_deeply(
+                    \@r,
+                    [ 1, 4 ],
+                    'Upper case table: deleteIfLowerThan'
+                );
+                is( $remaining->(), 'obrien',
+                    'Upper case table: right sessions kept' );
+            }
+        );
+    }
 
     $dbh->do("DROP TABLE IF EXISTS $table");
     $dbh->disconnect;
