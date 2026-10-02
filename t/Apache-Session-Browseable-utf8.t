@@ -127,8 +127,11 @@ SKIP: {
       unless eval { require Apache::Session::Browseable::Redis; 1 };
     my $class = 'Apache::Session::Browseable::Redis';
     my $args  = {
-        server   => $ENV{REDIS_URL},
-        database => $ENV{REDIS_DBNUM} || 15,
+        server => $ENV{REDIS_URL},
+
+        # Not the database of the other Redis tests, which flush theirs: they
+        # can run in parallel
+        database => ( ( $ENV{REDIS_DBNUM} || 15 ) + 11 ) % 16,
         Index    => 'uid'
     };
     roundTrip( 'Redis', $class, $args, $latin, "\x{c3}\x{a9}" );
