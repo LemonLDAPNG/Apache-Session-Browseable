@@ -18,6 +18,5 @@ run_tests(
         deleteNot       => 'sessions without the "not" field are never deleted',
         deleteAndNot    => 'sessions without the "not" field are never deleted',
         ruleNotModified => '"not" values of the rule are escaped in place',
-        gkfasField      => 'field names are returned lower-cased',
     },
 );
