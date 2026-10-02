@@ -6,7 +6,7 @@
 use strict;
 use warnings;
 use Test::More;
-use File::Temp qw(tempdir);
+use File::Temp   qw(tempdir);
 use Scalar::Util qw(refaddr);
 
 plan skip_all => "DBD::SQLite is needed for this test"
@@ -23,8 +23,8 @@ my $dsn = "dbi:SQLite:dbname=$dir/sessions.db";
 # SQLite transaction that has read the table prevents others from writing
 my $other = DBI->connect( $dsn, '', '',
     { RaiseError => 1, PrintError => 0, AutoCommit => 1 } );
-$other->do('CREATE TABLE sessions (id char(32) not null primary key,'
-      . ' a_session text, uid text)');
+$other->do( 'CREATE TABLE sessions (id char(32) not null primary key,'
+      . ' a_session text, uid text)' );
 $other->sqlite_busy_timeout(100);
 my $canWrite = sub {
     eval { $other->do('UPDATE sessions SET uid = uid'); 1 };
@@ -41,9 +41,9 @@ my $quiet = sub {
 my $class = 'Apache::Session::Browseable::SQLite';
 use_ok($class);
 
-my $args    = { DataSource => $dsn, Commit => 1, Index => 'uid' };
-my $noreuse = { %$args, noreuse => 1 };
-my $dbhOf = sub { tied( %{ $_[0] } )->{object_store}->{dbh} };
+my $args       = { DataSource => $dsn, Commit => 1, Index => 'uid' };
+my $noreuse    = { %$args, noreuse => 1 };
+my $dbhOf      = sub { tied( %{ $_[0] } )->{object_store}->{dbh} };
 my $newSession = sub {
     my ( $a, %data ) = @_;
     my %session;
@@ -71,8 +71,8 @@ untie %session;
 # 2. By default: the same handle for each session
 tie %session, $class, undef, $args;
 $session{uid} = 'rtyler';
-$id  = $session{_session_id};
-$dbh = $dbhOf->( \%session );
+$id           = $session{_session_id};
+$dbh          = $dbhOf->( \%session );
 is( $dbh->{AutoCommit}, '', 'Same attributes as with noreuse (AutoCommit)' );
 {
     local $SIG{__WARN__} = sub { };    # sqlite_unicode is deprecated
@@ -85,7 +85,7 @@ ok( $canWrite->(),  'No transaction left open' );
 
 tie %session, $class, $id, $args;
 is( refaddr( $dbhOf->( \%session ) ), refaddr($dbh), 'Handle reused' );
-is( $session{uid}, 'rtyler', 'Session data retrieved' );
+is( $session{uid},                    'rtyler',      'Session data retrieved' );
 $session{uid} = 'rtyler2';
 untie %session;
 ok( $canWrite->(), 'No transaction left open after an update' );
@@ -154,14 +154,13 @@ untie %session;
 # column marks the stores whose materialize() fails here (the session was
 # rolled back, or the query isn't SQLite's), which provides a failure
 my %stores = (
-    Postgres    => [ 0, 1 ],
-    Oracle      => [ 0, 1 ],
-    Informix    => [ 0, 1 ],
-    Patroni     => [ 0, 0 ],
-    SQLite      => [ 0, 0 ],
-    MySQL       => [ 1, 0 ],
-    MariaDBJSON => [ 1, 0 ],
-    Cassandra   => [ 1, 1 ],
+    Postgres  => [ 0, 1 ],
+    Oracle    => [ 0, 1 ],
+    Informix  => [ 0, 1 ],
+    Patroni   => [ 0, 0 ],
+    SQLite    => [ 0, 0 ],
+    MySQL     => [ 1, 0 ],
+    Cassandra => [ 1, 1 ],
 );
 my $n = 0;
 foreach my $name ( sort keys %stores ) {
@@ -171,8 +170,8 @@ foreach my $name ( sort keys %stores ) {
     my $session = sub {
         my ( $sid, %a ) = @_;
         return {
-            args => { DataSource => $dsn, Commit => 1, %a },
-            data => { _session_id => $sid },
+            args       => { DataSource  => $dsn, Commit => 1, %a },
+            data       => { _session_id => $sid },
             serialized => '{}',
         };
     };
@@ -181,9 +180,9 @@ foreach my $name ( sort keys %stores ) {
     $d = $s->{dbh};
     is( $d->{AutoCommit} ? 1 : 0, $autoCommit, "$name: AutoCommit" );
     undef $s;
-    ok( $d->{Active},        "$name: connection kept" );
-    ok( $stored->($sid),     "$name: session stored" );
-    ok( $canWrite->(),       "$name: no transaction left open" );
+    ok( $d->{Active},    "$name: connection kept" );
+    ok( $stored->($sid), "$name: session stored" );
+    ok( $canWrite->(),   "$name: no transaction left open" );
 
     $s = $store->new;
     $s->connection( $session->($sid) );

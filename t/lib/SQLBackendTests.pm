@@ -109,6 +109,13 @@ sub run_tests {
     my $remaining = sub {
         return $name->( $class->get_key_from_all_sessions($args) );
     };
+    my $quiet = sub {
+        my ($code) = @_;
+        local *STDERR;
+        my $err = '';
+        open STDERR, '>', \$err;
+        return $code->();
+    };
 
     # Run a group of tests. If the group is a known bug of this backend, run
     # it as TODO: STDERR is silenced and a die is reported as a failure
@@ -157,7 +164,8 @@ sub run_tests {
         ok( !$ndbh->{Active}, 'noreuse: connection closed at untie' );
 
         tie %s, $class, $rid, $rargs;
-        is( refaddr( $dbhOf->( \%s ) ), refaddr($rdbh), 'reuse: handle reused' );
+        is( refaddr( $dbhOf->( \%s ) ), refaddr($rdbh),
+            'reuse: handle reused' );
         is( $s{mail}, 'dwho@badwolf.org', 'reuse: session retrieved' );
         $s{mail} = 'reuse@badwolf.org';
         untie %s;
@@ -178,7 +186,8 @@ sub run_tests {
         );
         ok(
             eval {
-                $dbh->do( "UPDATE $table SET a_session = a_session WHERE id = ?",
+                $dbh->do(
+                    "UPDATE $table SET a_session = a_session WHERE id = ?",
                     undef, $rid );
                 1;
             },
@@ -209,7 +218,8 @@ sub run_tests {
         is( $s{uid}, 'dwho', 'reuse: session retrieved after a failure' );
         tied(%s)->delete;
         untie %s;
-        ok( !eval { tie %s, $class, $rid, $args; 1 }, 'reuse: session deleted' );
+        ok( !eval { tie %s, $class, $rid, $args; 1 },
+            'reuse: session deleted' );
     }
 
     $reset->();

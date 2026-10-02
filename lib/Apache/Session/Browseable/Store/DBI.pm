@@ -17,9 +17,8 @@ our $VERSION = 1.3.11;
 # Postgres, Oracle and Informix stores also lock the row with
 # "SELECT ... FOR UPDATE", but here materialize() comes first from
 # Apache::Session::Store::DBI, which doesn't lock); the Patroni and SQLite
-# stores copy this model. Apache::Session::Store::MySQL (MySQLJSON and
-# MariaDBJSON derive from it) was written for MyISAM, which has no
-# transaction: AutoCommit on. No SQL backend of this distribution locks
+# stores copy this model. Apache::Session::Store::MySQL (MySQLJSON derives
+# from it) was written for MyISAM, which has no transaction: AutoCommit on. No SQL backend of this distribution locks
 # sessions (they all use Apache::Session::Lock::Null): with AutoCommit off,
 # the transaction only spans the reads and the write of one tie.
 # Keeping each store's own attributes keeps its behaviour unchanged.
