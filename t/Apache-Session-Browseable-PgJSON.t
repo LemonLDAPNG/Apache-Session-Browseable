@@ -1,0 +1,19 @@
+use strict;
+use lib 't/lib';
+use SQLBackendTests;
+
+run_tests(
+    class  => 'Apache::Session::Browseable::PgJSON',
+    driver => 'Pg',
+    env    => 'PG',
+    table  => 'asb_test_pgjson',
+    create => [
+'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session jsonb)'
+    ],
+    todo => {
+        deleteAnd      => '"and" rules are built from the "or" hash',
+        deleteNot      => 'sessions without the "not" field are never deleted',
+        deleteAndNot   => '"and" rules are built from the "or" hash',
+        deleteNotQuote => '"not" values are not escaped',
+    },
+);
