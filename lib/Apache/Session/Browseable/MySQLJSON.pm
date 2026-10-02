@@ -83,8 +83,8 @@ sub deleteIfLowerThan {
     }
     elsif ( $rule->{and} ) {
         $query = join ' AND ',
-          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} }
-          keys %{ $rule->{or} };
+          map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{and}->{$_}} }
+          keys %{ $rule->{and} };
     }
     if ( $rule->{not} ) {
         $query = "($query) AND "
