@@ -32,6 +32,54 @@ sub unserialize {
     return $tmp->{data};
 }
 
+# Keys per SCAN call (a hint for Redis)
+our $SCAN_COUNT = 1000;
+
+# Keys per MGET: a huge index set must not block Redis with one big command
+our $MGET_BATCH = 500;
+
+# Like $redisObj->mget(@keys), in batches. MGET returns undef for missing
+# keys and keys that aren't strings
+sub _mget {
+    my ( $redisObj, @keys ) = @_;
+    my @res;
+    while (@keys) {
+        push @res, $redisObj->mget( splice( @keys, 0, $MGET_BATCH ) );
+    }
+    return @res;
+}
+
+# Members of index sets @$sets, read in one pipeline: { set => [ keys ] }.
+# A key that isn't a set is ignored; other Redis errors are raised
+sub _smembers {
+    my ( $redisObj, $sets ) = @_;
+    my ( %res, $fatal );
+    foreach my $set (@$sets) {
+        $redisObj->smembers(
+            $set,
+            sub {
+                my ( $reply, $err ) = @_;
+                if ($err) {
+                    $fatal //= $err unless ( $err =~ /WRONGTYPE/ );
+                }
+                else {
+                    $res{$set} = $reply;
+                }
+            }
+        );
+    }
+    $redisObj->wait_all_responses;
+    die $fatal if ($fatal);
+    return \%res;
+}
+
+# Lazy cleanup: remove member $k of index $set if its session doesn't exist
+# anymore (MGET also returns undef for keys that aren't strings)
+sub _removeOrphan {
+    my ( $class, $redisObj, $set, $k ) = @_;
+    eval { $redisObj->srem( $set, $k ) unless ( $redisObj->exists($k) ) };
+}
+
 sub searchOn {
     my ( $class, $args, $selectField, $value, @fields ) = @_;
 
@@ -40,13 +88,14 @@ sub searchOn {
 
         my $redisObj  = $class->_getRedis($args);
         my $index_key = "${selectField}_$value";
-        my @keys      = $redisObj->smembers($index_key);
+        my @keys      = grep { $_ } $redisObj->smembers($index_key);
+        my %values;
+        @values{@keys} = _mget( $redisObj, @keys );
         foreach my $k (@keys) {
-            next unless ($k);
-            my $tmp = $redisObj->get($k);
+            my $tmp = $values{$k};
             unless ($tmp) {
                 # Lazy cleanup: remove orphan from index
-                eval { $redisObj->srem( $index_key, $k ) };
+                $class->_removeOrphan( $redisObj, $index_key, $k );
                 next;
             }
             eval {
@@ -94,15 +143,24 @@ sub searchOnExpr {
         my $cursor   = 0;
         do {
             my ( $new_cursor, $sets ) =
-              $redisObj->scan( $cursor, MATCH => "${selectField}_$value" );
-            foreach my $set (@$sets) {
-                next unless $redisObj->type($set) eq 'set';
-                my @keys = $redisObj->smembers($set);
-                foreach my $k (@keys) {
-                    my $v = $redisObj->get($k);
+              $redisObj->scan( $cursor,
+                MATCH => "${selectField}_$value",
+                COUNT => $SCAN_COUNT );
+
+            # The sets of a SCAN page are read together: a few round trips
+            # instead of two per set
+            my $members = _smembers( $redisObj, $sets );
+            my %seen;
+            my @keys =
+              grep { $_ and !$seen{$_}++ } map { @$_ } values %$members;
+            my %values;
+            @values{@keys} = _mget( $redisObj, @keys );
+            foreach my $set ( keys %$members ) {
+                foreach my $k ( grep { $_ } @{ $members->{$set} } ) {
+                    my $v = $values{$k};
                     unless ($v) {
                         # Lazy cleanup: remove orphan from index
-                        eval { $redisObj->srem( $set, $k ) };
+                        $class->_removeOrphan( $redisObj, $set, $k );
                         next;
                     }
                     my $tmp = unserialize($v);
