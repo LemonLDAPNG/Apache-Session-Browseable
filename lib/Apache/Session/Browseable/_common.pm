@@ -9,7 +9,7 @@ sub _tabInTab {
     my ( $class, $t1, $t2 ) = @_;
 
     # if no fields are required, return 0
-    return 0 unless(@$t1 and @$t2);
+    return 0 unless ( @$t1 and @$t2 );
     foreach my $f (@$t1) {
         unless ( grep { $_ eq $f } @$t2 ) {
             return 0;
@@ -23,6 +23,23 @@ sub _fieldIsIndexed {
     my $index =
       ref( $args->{Index} ) ? $args->{Index} : [ split /\s+/, $args->{Index} ];
     return ( grep { $_ eq $field } @$index );
+}
+
+# Check the structure of a deleteIfLowerThan() rule
+sub _checkRule {
+    my ( $class, $rule ) = @_;
+    unless ( ref($rule) eq 'HASH' ) {
+        print STDERR "deleteIfLowerThan: rule must be a hash reference\n";
+        return 0;
+    }
+    foreach my $type (qw(or and not)) {
+        next unless defined $rule->{$type};
+        unless ( ref( $rule->{$type} ) eq 'HASH' ) {
+            print STDERR "deleteIfLowerThan: $type must be a hash reference\n";
+            return 0;
+        }
+    }
+    return 1;
 }
 
 1;

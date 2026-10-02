@@ -108,6 +108,13 @@ sub run_tests {
     my $remaining = sub {
         return $name->( $class->get_key_from_all_sessions($args) );
     };
+    my $quiet = sub {
+        my ($code) = @_;
+        local *STDERR;
+        my $err = '';
+        open STDERR, '>', \$err;
+        return $code->();
+    };
 
     # Run a group of tests. If the group is a known bug of this backend, run
     # it as TODO: STDERR is silenced and a die is reported as a failure
@@ -335,8 +342,8 @@ sub run_tests {
 
             $reset->();
             @r = $class->deleteIfLowerThan( $args,
-                { or => { _utime => 400 }, not => { uid => "x' OR '1'='1" } } );
-            is_deeply( \@r, [ 1, 4 ], 'deleteIfLowerThan "not": no injection' );
+                { or => { _utime => 200 }, not => { uid => "x' OR '1'='1" } } );
+            is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan "not": no injection' );
         }
     );
     $group->(
@@ -352,6 +359,58 @@ sub run_tests {
                 eval { $class->deleteIfLowerThan( $args, $rule ) };
             }
             is( $rule->{not}->{uid}, "O'Brien", 'Rule is not modified' );
+        }
+    );
+
+    # Rules that can't be turned into SQL are rejected without exception;
+    # an empty "not" is ignored
+    $group->(
+        deleteInvalid => sub {
+            $reset->();
+            my @r = eval {
+                $class->deleteIfLowerThan( $args,
+                    { not => { uid => 'dwho' } } );
+            };
+            is_deeply(
+                \@r,
+                [ 0, 0 ],
+                'deleteIfLowerThan with only "not" returns 0'
+            ) or diag $@;
+            is( $remaining->(), 'dwho,nokind,obrien,rtyler',
+                'Nothing deleted' );
+
+            @r = $class->deleteIfLowerThan( $args,
+                { or => { _utime => 200 }, not => {} } );
+            is_deeply( \@r, [ 1, 3 ], 'deleteIfLowerThan with an empty "not"' );
+
+            foreach my $bad ( 'x', [ _utime => 200 ], \'x' ) {
+                my $label = ref($bad) || $bad;
+                @r = $quiet->(
+                    sub {
+                        eval {
+                            $class->deleteIfLowerThan( $args,
+                                { or => { _utime => 200 }, not => $bad } );
+                        };
+                    }
+                );
+                is_deeply(
+                    \@r,
+                    [ 0, 0 ],
+                    "\"not\" is not a hash ref ($label): returns 0"
+                );
+                @r = $quiet->(
+                    sub {
+                        eval { $class->deleteIfLowerThan( $args, $bad ) }
+                    }
+                );
+                is_deeply(
+                    \@r,
+                    [ 0, 0 ],
+                    "rule is not a hash ref ($label): returns 0"
+                );
+            }
+            is( $remaining->(), 'obrien',
+                'Invalid rule: only empty "not" deleted' );
         }
     );
 

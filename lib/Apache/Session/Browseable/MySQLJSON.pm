@@ -75,6 +75,7 @@ sub _query {
 
 sub deleteIfLowerThan {
     my ( $class, $args, $rule ) = @_;
+    return wantarray ? ( 0, 0 ) : 0 unless ( $class->_checkRule($rule) );
     my $query;
     if ( $rule->{or} ) {
         $query = join ' OR ',
@@ -86,18 +87,24 @@ sub deleteIfLowerThan {
           map { qq{cast(a_session->>"\$.$_" as UNSIGNED) < $rule->{or}->{$_}} }
           keys %{ $rule->{or} };
     }
-    if ( $rule->{not} ) {
+    return wantarray ? ( 0, 0 ) : 0 unless ($query);
+    if ( $rule->{not} and keys %{ $rule->{not} } ) {
         $query = "($query) AND "
           . join( ' AND ',
             map { qq{a_session->>"\$.$_" <> '$rule->{not}->{$_}'} }
               keys %{ $rule->{not} } );
     }
-    return 0 unless ($query);
-    my $dbh        = $class->_classDbh($args);
     my $table_name = $args->{TableName}
       || $Apache::Session::Store::DBI::TableName;
-    my $rows = $dbh->do("DELETE FROM $table_name WHERE $query");
-    return 0 unless defined $rows;
+    my $rows = eval {
+        my $dbh = $class->_classDbh($args);
+        $dbh->do("DELETE FROM $table_name WHERE $query");
+    };
+    if ($@) {
+        print STDERR "deleteIfLowerThan: $@\n";
+        return wantarray ? ( 0, 0 ) : 0;
+    }
+    return wantarray ? ( 0, 0 ) : 0 unless defined $rows;
 
     if (wantarray) {
         $rows = 0 if $rows == -1;
