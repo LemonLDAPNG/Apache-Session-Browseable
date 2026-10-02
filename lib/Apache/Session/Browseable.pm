@@ -54,6 +54,9 @@ manage connection using Patroni API to find master node of PostgreSQL cluster
 
 =item L<Apache::Session::Browseable::MySQLJSON>: for MySQL only, uses "json" field
 
+=item L<Apache::Session::Browseable::MariaDBJSON>: for MariaDB only, uses
+"json" field and generated columns
+
 =back
 
 =head3 Other

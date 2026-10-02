@@ -19,10 +19,9 @@ run_tests(
     index => 'uid _whatToTrace _session_kind _utime _lastSeen',
     todo  => {
         searchOnExprQuote => 'quotes are doubled although the value is bound',
-        deleteNot       => 'sessions without the "not" field are never deleted',
-        deleteAndNot    => 'sessions without the "not" field are never deleted',
-        ruleNotModified => '"not" values of the rule are escaped in place',
-        gkfasField      => 'field names are returned lower-cased',
+        deleteNot    => 'sessions without the "not" field are never deleted',
+        deleteAndNot => 'sessions without the "not" field are never deleted',
+        gkfasField   => 'field names are returned lower-cased',
     },
     explain => sub {
         my ($class) = @_;

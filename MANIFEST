@@ -8,6 +8,7 @@ lib/Apache/Session/Browseable/DBI.pm
 lib/Apache/Session/Browseable/File.pm
 lib/Apache/Session/Browseable/Informix.pm
 lib/Apache/Session/Browseable/LDAP.pm
+lib/Apache/Session/Browseable/MariaDBJSON.pm
 lib/Apache/Session/Browseable/MySQL.pm
 lib/Apache/Session/Browseable/MySQLJSON.pm
 lib/Apache/Session/Browseable/Oracle.pm
@@ -22,6 +23,7 @@ lib/Apache/Session/Browseable/Store/DBI.pm
 lib/Apache/Session/Browseable/Store/File.pm
 lib/Apache/Session/Browseable/Store/Informix.pm
 lib/Apache/Session/Browseable/Store/LDAP.pm
+lib/Apache/Session/Browseable/Store/MariaDBJSON.pm
 lib/Apache/Session/Browseable/Store/MySQL.pm
 lib/Apache/Session/Browseable/Store/Oracle.pm
 lib/Apache/Session/Browseable/Store/Patroni.pm
@@ -46,6 +48,9 @@ t/Apache-Session-Browseable-DBI.t
 t/Apache-Session-Browseable-File.t
 t/Apache-Session-Browseable-LDAP.t
 t/Apache-Session-Browseable-lowerThan.t
+t/Apache-Session-Browseable-MariaDBJSON-charset.t
+t/Apache-Session-Browseable-MariaDBJSON-index.t
+t/Apache-Session-Browseable-MariaDBJSON.t
 t/Apache-Session-Browseable-MySQL.t
 t/Apache-Session-Browseable-MySQLJSON.t
 t/Apache-Session-Browseable-MySQLJSON-populate.t
@@ -56,6 +61,7 @@ t/Apache-Session-Browseable-Postgres.t
 t/Apache-Session-Browseable-Redis.t
 t/Apache-Session-Browseable-SQLite.t
 t/Apache-Session-Browseable-Store-DBI.t
+t/Apache-Session-Browseable-Store-MariaDBJSON.t
 t/Apache-Session-Browseable-Store-MySQL.t
 t/Apache-Session-Browseable-Store-Patroni.t
 t/lib/SQLBackendTests.pm
