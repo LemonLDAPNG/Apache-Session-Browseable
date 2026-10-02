@@ -25,15 +25,15 @@ run_tests(
           . ' KEY as_ls (as_ls), KEY as_ip (as_ip)) ENGINE=InnoDB'
     ],
     exact => 1,
+    json  => 1,
+    weird => [ "weird'field", 'a"b\\c', 'a?b', 'x\\' ],
     todo  => {
-        searchOnData   => 'session data is not decoded',
-        searchOnFields => 'field names are returned lower-cased',
-        gkfasArray     => 'the query does not select the id column',
-        gkfasField     => 'the query does not select the id column',
-        deleteAnd      => '"and" rules are built from the "or" hash',
-        deleteNot      => 'sessions without the "not" field are never deleted',
-        deleteAndNot   => '"and" rules are built from the "or" hash',
-        deleteNotQuote => '"not" values are not escaped',
+        searchOnData => 'session data is not decoded',
+        gkfasArray   => 'the query does not select the id column',
+        gkfasField   => 'the query does not select the id column',
+        deleteAnd    => '"and" rules are built from the "or" hash',
+        deleteNot    => 'sessions without the "not" field are never deleted',
+        deleteAndNot => '"and" rules are built from the "or" hash',
     },
     explain => sub {
         my ($class) = @_;

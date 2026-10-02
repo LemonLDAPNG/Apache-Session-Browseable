@@ -143,6 +143,72 @@ $res = eval {
 is( join( ',', sort values %{ $res || {} } ),
     'u1,u2,u3', 'Subclass without populate: callback called' );
 
+# "not" value containing a quote is bound, not interpolated
+$ids = reset_sessions(
+    obrien => { _utime => 100, _session_kind => "O'Brien" },
+    other  => { _utime => 100, _session_kind => 'x' },
+    recent => { _utime => 300, _session_kind => 'x' },
+);
+$rule = { or => { _utime => 250 }, not => { _session_kind => "O'Brien" } };
+ok( $class->deleteIfLowerThan( $args, $rule ), 'not with quote' );
+is( remaining($ids), 'obrien,recent', 'not with quote: "other" deleted' );
+is( $rule->{not}->{_session_kind}, "O'Brien", 'rule is not modified' );
+
+$ids = reset_sessions(
+    a      => { _utime => 100, _session_kind => 'a' },
+    recent => { _utime => 300, _session_kind => 'x' },
+);
+ok(
+    $class->deleteIfLowerThan(
+        $args,
+        { or => { _utime => 250 }, not => { _session_kind => "x' OR '1'='1" } }
+    ),
+    'not with injection attempt'
+);
+is( remaining($ids), 'recent', 'not with injection attempt: no injection' );
+
+# deleteIfLowerThan with a non numeric threshold does nothing
+$ids = reset_sessions(
+    a => { _utime => 100, _session_kind => 'SSO' },
+    b => { _utime => 100, _session_kind => 'Persistent' },
+);
+foreach my $bad ( '100 OR 1=1', '1e3', '', undef ) {
+    is(
+        quiet {
+            eval {
+                $class->deleteIfLowerThan( $args,
+                    { or => { _utime => $bad } } );
+            }
+        },
+        0,
+        'non numeric threshold: returns 0 ('
+          . ( defined $bad ? "'$bad'" : 'undef' ) . ')'
+    );
+}
+is(
+    quiet {
+        $class->deleteIfLowerThan( $args,
+            { and => { _utime => 250, _lastSeen => 'x' } } );
+    },
+    0,
+    'non numeric "and" threshold: returns 0'
+);
+is(
+    quiet {
+        $class->deleteIfLowerThan( $args,
+            { or => { _utime => "\x{0661}\x{0662}" } } );
+    },
+    0,
+    'non ASCII digits threshold: returns 0'
+);
+is( remaining($ids), 'a,b', 'non numeric threshold: nothing deleted' );
+
+# deleteIfLowerThan with a decimal or negative threshold
+ok( $class->deleteIfLowerThan( $args, { or => { _utime => '100.5' } } ),
+    'decimal threshold accepted' );
+ok( $class->deleteIfLowerThan( $args, { or => { _utime => '-1' } } ),
+    'negative threshold accepted' );
+
 done_testing();
 
 END {

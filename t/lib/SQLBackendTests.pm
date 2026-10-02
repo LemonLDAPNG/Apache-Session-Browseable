@@ -8,6 +8,9 @@ package SQLBackendTests;
 #  - table:   table name (dropped before and after tests)
 #  - create:  SQL statements to create table (__TABLE__ is replaced)
 #  - index:   indexed fields (DBI based backends, one column per field)
+#  - json:    1 if any field can be queried (JSON/Hstore backends)
+#  - weird:   field names that need quoting (JSON/Hstore backends)
+#  - scs:     1 to also test with standard_conforming_strings=off (PostgreSQL)
 #  - todo:    known bugs of this backend: { test group => reason }. Tests of
 #             these groups are run as TODO tests and may die without
 #             breaking the rest of the suite
@@ -59,7 +62,8 @@ sub run_tests {
         Commit     => 1,
         ( $o{index} ? ( Index => $o{index} ) : () ),
     };
-    my %todo = %{ $o{todo} || {} };
+    my %todo  = %{ $o{todo}  || {} };
+    my @weird = @{ $o{weird} || [] };
 
     my $newSession = sub {
         my %data = @_;
@@ -79,6 +83,7 @@ sub run_tests {
             _utime        => 100,
             _lastSeen     => 100,
             mail          => 'dwho@badwolf.org',
+            ( map { ( $_ => 'w1' ) } @weird ),
         },
         rtyler => {
             uid           => 'rtyler',
@@ -87,6 +92,7 @@ sub run_tests {
             _utime        => 100,
             _lastSeen     => 300,
             mail          => 'rtyler@badwolf.org',
+            ( map { ( $_ => 'w2' ) } @weird ),
         },
         obrien => {
             uid           => "O'Brien",
@@ -116,6 +122,13 @@ sub run_tests {
     };
     my $remaining = sub {
         return $name->( $class->get_key_from_all_sessions($args) );
+    };
+    my $quiet = sub {
+        my ($code) = @_;
+        local *STDERR;
+        my $err = '';
+        open STDERR, '>', \$err;
+        return $code->();
     };
 
     # Run a group of tests. If the group is a known bug of this backend, run
@@ -220,6 +233,7 @@ sub run_tests {
 
     # Case and accent sensitive searches, on indexed and non indexed fields
     if ( $o{exact} ) {
+
         # Character string: DBD::mysql sends other strings in Latin-1, which
         # an utf8mb4 column rejects
         my $elodie = "\x{c9}lodie";
@@ -316,6 +330,55 @@ sub run_tests {
         my $res = $class->get_key_from_all_sessions($args);
         is( scalar( keys %$res ), 5, 'Sessions by batches without callback' );
         $reset->();
+    }
+
+    # Fields needing quotes
+    foreach my $w (@weird) {
+        $group->(
+            weird => sub {
+                my $res = $class->searchOn( $args, $w, 'w1', $w, 'uid' );
+                is_deeply(
+                    $res,
+                    {
+                        $ids->{dwho} =>
+                          { id => $ids->{dwho}, $w => 'w1', uid => 'dwho' }
+                    },
+                    "searchOn on field [$w]"
+                );
+                $res = $class->searchOnExpr( $args, $w, 'w*', 'uid' );
+                is( $name->($res), 'dwho,rtyler',
+                    "searchOnExpr on field [$w]" );
+            }
+        );
+        $group->(
+            gkfasArray => sub {
+                my $res =
+                  $class->get_key_from_all_sessions( $args, [ $w, 'uid' ] );
+                is( $res->{ $ids->{rtyler} }->{$w},
+                    'w2', "get_key_from_all_sessions with field [$w]" );
+            }
+        );
+    }
+    if ( $o{json} ) {
+        foreach my $w ( "x' OR '1'='1", 'x" OR "1"="1', "x`y" ) {
+            $group->(
+                fieldInjection => sub {
+                    my $res = eval { $class->searchOn( $args, $w, 'w1', $w ) };
+                    is_deeply( $res, {},
+                        "searchOn on field [$w]: no injection" )
+                      or diag $@;
+                }
+            );
+            $group->(
+                gkfasArray => sub {
+                    my $res =
+                      eval { $class->get_key_from_all_sessions( $args, [$w] ); };
+                    is( scalar( keys %{ $res || {} } ),
+                        4, "get_key_from_all_sessions with field [$w]" )
+                      or diag $@;
+                }
+            );
+        }
     }
 
     # deleteIfLowerThan
@@ -453,6 +516,133 @@ sub run_tests {
             }
         }
         $dbh->do('RESET enable_seqscan') if ( $o{driver} eq 'Pg' );
+    }
+
+    # Thresholds are inserted into the query: they must be numbers
+    $group->(
+        deleteThresholds => sub {
+            $reset->();
+            foreach my $type (qw(or and)) {
+                foreach my $bad ( '200 OR 1=1', '1e3', '', "\x{0661}" ) {
+                    ( my $label = $bad ) =~ s/[^ -~]/?/g;
+                    my @r = $quiet->(
+                        sub {
+                            eval {
+                                $class->deleteIfLowerThan(
+                                    $args,
+                                    {
+                                        $type =>
+                                          { _utime => 400, _lastSeen => $bad }
+                                    }
+                                );
+                            };
+                        }
+                    );
+                    is_deeply(
+                        \@r,
+                        [ 0, 0 ],
+                        "\"$type\" with threshold '$label' returns 0"
+                    );
+                }
+            }
+            is( $remaining->(), 'dwho,nokind,obrien,rtyler',
+                'Nothing deleted' );
+
+            my @r =
+              $class->deleteIfLowerThan( $args,
+                { or => { _utime => '100.5' } } );
+            is_deeply(
+                \@r,
+                [ 1, 3 ],
+                'deleteIfLowerThan with a decimal threshold'
+            );
+        }
+    );
+
+    # "not" on fields needing quotes. Sessions without the field must be
+    # deleted too
+    foreach my $w (@weird) {
+        $group->(
+            deleteNot => sub {
+                $reset->();
+                my @r = $class->deleteIfLowerThan( $args,
+                    { or => { _utime => 400 }, not => { $w => 'w1' } } );
+                is_deeply(
+                    \@r,
+                    [ 1, 3 ],
+                    "deleteIfLowerThan \"not\" on field [$w]"
+                );
+                is( $remaining->(), 'dwho',
+                    "deleteIfLowerThan \"not\" on field [$w]" );
+            }
+        );
+    }
+
+    # PostgreSQL with standard_conforming_strings=off: backslashes are escape
+    # characters in plain string literals
+    if ( $o{scs} ) {
+        my $mdbh = $class->_classDbh($args);
+        $mdbh->do('SET standard_conforming_strings = off');
+        is( $mdbh->selectrow_array('SHOW standard_conforming_strings'),
+            'off', 'standard_conforming_strings is off for the module' );
+        my %isWeird = map { $_ => 1 } @weird;
+        my @names = ( @weird, grep { !$isWeird{$_} } "x\\' OR '1'='1", 'x\\' );
+        foreach my $w (@names) {
+            my $found = $isWeird{$w};
+            my $l     = "field [$w] (scs off)";
+            $reset->();
+            $group->(
+                weird => sub {
+                    my $res =
+                      eval { $class->searchOn( $args, $w, 'w1', 'uid' ) };
+                    diag $@ if $@;
+                    is( $name->($res), $found ? 'dwho' : '', "searchOn on $l" );
+                    $res =
+                      eval { $class->searchOnExpr( $args, $w, 'w*', 'uid' ) };
+                    diag $@ if $@;
+                    is(
+                        $name->($res),
+                        $found ? 'dwho,rtyler' : '',
+                        "searchOnExpr on $l"
+                    );
+                }
+            );
+            $group->(
+                gkfasArray => sub {
+                    my $res =
+                      eval { $class->get_key_from_all_sessions( $args, [$w] ) };
+                    diag $@ if $@;
+                    is( scalar( keys %{ $res || {} } ),
+                        4, "get_key_from_all_sessions on $l" );
+                    is( $res->{ $ids->{rtyler} }->{$w},
+                        'w2', "get_key_from_all_sessions value on $l" )
+                      if ($found);
+                }
+            );
+            $group->(
+                deleteNot => sub {
+                    my @r = eval {
+                        $class->deleteIfLowerThan( $args,
+                            { or => { _utime => 200 }, not => { $w => 'w1' } }
+                        );
+                    };
+                    diag $@ if $@;
+                    is_deeply(
+                        \@r,
+                        [ 1, $found ? 2 : 3 ],
+                        "deleteIfLowerThan \"not\" on $l"
+                    );
+                    is(
+                        $remaining->(),
+                        $found ? 'dwho,obrien' : 'obrien',
+                        "deleteIfLowerThan \"not\" on $l: right sessions kept"
+                    );
+                }
+            );
+        }
+        $mdbh->do('SET standard_conforming_strings = on');
+        is( $mdbh->selectrow_array('SHOW standard_conforming_strings'),
+            'on', 'standard_conforming_strings is back on' );
     }
 
     $dbh->do("DROP TABLE IF EXISTS $table");

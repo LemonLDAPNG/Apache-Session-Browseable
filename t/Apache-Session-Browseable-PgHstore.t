@@ -17,13 +17,15 @@ run_tests(
         'CREATE INDEX __TABLE___ls1 ON __TABLE__'
           . " ( ( cast(a_session -> '_lastSeen' AS bigint) ) )",
     ],
-    todo => {
-        gkfasArray     => 'the query does not select the id column',
-        gkfasField     => 'the query does not select the id column',
-        deleteAnd      => '"and" rules are built from the "or" hash',
-        deleteNot      => 'sessions without the "not" field are never deleted',
-        deleteAndNot   => '"and" rules are built from the "or" hash',
-        deleteNotQuote => '"not" values are not escaped',
+    json  => 1,
+    scs   => 1,
+    weird => [ "weird'field", 'a?b' ],
+    todo  => {
+        gkfasArray   => 'the query does not select the id column',
+        gkfasField   => 'the query does not select the id column',
+        deleteAnd    => '"and" rules are built from the "or" hash',
+        deleteNot    => 'sessions without the "not" field are never deleted',
+        deleteAndNot => '"and" rules are built from the "or" hash',
     },
     explain => sub {
         my ($class) = @_;

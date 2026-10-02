@@ -13,7 +13,7 @@ sub _tabInTab {
     my ( $class, $t1, $t2 ) = @_;
 
     # if no fields are required, return 0
-    return 0 unless(@$t1 and @$t2);
+    return 0 unless ( @$t1 and @$t2 );
     foreach my $f (@$t1) {
         unless ( grep { $_ eq $f } @$t2 ) {
             return 0;
@@ -68,6 +68,22 @@ sub _forEachSession {
         $last = $rows->[-1]->[0] if (@$rows);
     } while ( @$rows >= $limit );
     return;
+}
+
+# deleteIfLowerThan() thresholds are inserted into SQL queries, so they must
+# be numbers
+sub _checkThresholds {
+    my ( $class, $rule ) = @_;
+    return 1 unless ( ref($rule) eq 'HASH' );
+    my $thresholds = $rule->{or} || $rule->{and};
+    return 1 unless ( ref($thresholds) eq 'HASH' );
+    foreach ( values %$thresholds ) {
+        unless ( defined($_) and /^-?[0-9]+(?:\.[0-9]+)?\z/ ) {
+            print STDERR "deleteIfLowerThan: threshold must be a number\n";
+            return 0;
+        }
+    }
+    return 1;
 }
 
 1;

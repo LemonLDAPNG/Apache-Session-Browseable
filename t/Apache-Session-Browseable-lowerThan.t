@@ -34,11 +34,11 @@ my @tests = (
     ],
     [
         'MySQLJSON', '_utime',
-        q{cast(a_session->>"$._utime" as UNSIGNED) < 200}
+        q{cast(a_session->>'$._utime' as UNSIGNED) < 200}
     ],
     [
         'MySQLJSON', '_lastSeen',
-        q{cast(a_session->>"$._lastSeen" as UNSIGNED) < 200}
+        q{cast(a_session->>'$._lastSeen' as UNSIGNED) < 200}
     ],
 );
 
