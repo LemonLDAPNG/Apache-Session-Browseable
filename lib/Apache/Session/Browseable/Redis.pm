@@ -223,10 +223,14 @@ sub isIndexed {
     return grep { $_ eq $field } @$indexes;
 }
 
+my %keysRe_re;
 sub isLlngKey {
     my ( $class, $args, $name ) = @_;
     my $expr = $args->{keysRe} || '^[0-9a-f]{32,}$';
-    return ( $name =~ /$expr/o );
+
+    # Compile per expression: a process may use several keysRe
+    $keysRe_re{$expr} = qr/$expr/ unless ( exists $keysRe_re{$expr} );
+    return ( $name =~ $keysRe_re{$expr} );
 }
 
 sub get_key_from_all_sessions {
