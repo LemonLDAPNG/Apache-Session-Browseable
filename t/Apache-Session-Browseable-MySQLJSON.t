@@ -11,7 +11,6 @@ run_tests(
 'CREATE TABLE __TABLE__ (id varchar(64) not null primary key, a_session json)'
     ],
     todo => {
-        searchOnData   => 'session data is not decoded',
         searchOnFields => 'field names are returned lower-cased',
         gkfasArray     => 'the query does not select the id column',
         gkfasField     => 'the query does not select the id column',
